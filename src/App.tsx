@@ -6,8 +6,9 @@ import {
 } from '@txnlab/use-wallet-react'
 import { WalletUIProvider, WalletButton } from '@txnlab/use-wallet-ui-react'
 import { WalletInfo } from './components/WalletInfo'
+import { TextWithCopy } from './components/TextWithCopy'
+import { NFTDashboard } from './components/NFTDashboard'
 import { HomePage } from './components/HomePage'
-import { LoyaltyProgramDashboard } from './components/LoyaltyProgramDashboard'
 import { useState } from 'react'
 
 const walletManager = new WalletManager({
@@ -25,7 +26,7 @@ const walletManager = new WalletManager({
 })
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-programs'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'nft-dashboard'>('home');
 
   return (
     <WalletProvider manager={walletManager}>
@@ -47,10 +48,10 @@ function App() {
                       Home
                     </button>
                     <button 
-                      onClick={() => setCurrentPage('loyalty-programs')} 
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'loyalty-programs' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                      onClick={() => setCurrentPage('nft-dashboard')} 
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'nft-dashboard' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
                     >
-                      Loyalty Programs
+                      NFT Dashboard
                     </button>
                   </nav>
                 </div>
@@ -66,8 +67,8 @@ function App() {
               <HomePage />
             ) : (
               <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <WalletInfo />
-                <LoyaltyProgramDashboard />
+            <WalletInfo />
+                <NFTDashboard />
               </div>
             )}
           </main>
