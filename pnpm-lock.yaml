@@ -10,10 +10,10 @@ importers:
     dependencies:
       '@algorandfoundation/algokit-subscriber':
         specifier: ^3.2.0
-        version: 3.2.0(@algorandfoundation/algokit-utils@9.1.0(algosdk@3.3.0))(algosdk@3.3.0)
+        version: 3.2.0(@algorandfoundation/algokit-utils@9.1.0(algosdk@3.3.0)(encoding@0.1.13))(algosdk@3.3.0)
       '@algorandfoundation/algokit-utils':
         specifier: ^9.1.0
-        version: 9.1.0(algosdk@3.3.0)
+        version: 9.1.0(algosdk@3.3.0)(encoding@0.1.13)
       '@blockshake/defly-connect':
         specifier: ^1.2.1
         version: 1.2.1(algosdk@3.3.0)
@@ -38,12 +38,18 @@ importers:
       algosdk:
         specifier: ^3.2.0
         version: 3.3.0
+      framer-motion:
+        specifier: ^11.18.2
+        version: 11.18.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       lucide-react:
         specifier: ^0.508.0
         version: 0.508.0(react@19.1.0)
       lute-connect:
         specifier: ^1.6.1
         version: 1.6.1
+      pinata:
+        specifier: ^2.4.8
+        version: 2.4.8(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       react:
         specifier: ^19.1.0
         version: 19.1.0
@@ -51,6 +57,9 @@ importers:
         specifier: ^19.1.0
         version: 19.1.0(react@19.1.0)
     devDependencies:
+      '@types/node':
+        specifier: ^24.0.3
+        version: 24.0.3
       '@types/react':
         specifier: ^18.2.55
         version: 18.3.23
@@ -59,7 +68,7 @@ importers:
         version: 18.3.7(@types/react@18.3.23)
       '@vitejs/plugin-react':
         specifier: ^4.4.1
-        version: 4.5.0(vite@6.3.5(jiti@1.21.7)(yaml@2.8.0))
+        version: 4.5.0(vite@6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0))
       autoprefixer:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.5.4)
@@ -98,10 +107,10 @@ importers:
         version: 8.33.0(eslint@9.27.0(jiti@1.21.7))(typescript@5.8.3)
       vite:
         specifier: ^6.3.4
-        version: 6.3.5(jiti@1.21.7)(yaml@2.8.0)
+        version: 6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0)
       vite-plugin-node-polyfills:
         specifier: ^0.23.0
-        version: 0.23.0(rollup@4.41.1)(vite@6.3.5(jiti@1.21.7)(yaml@2.8.0))
+        version: 0.23.0(rollup@4.41.1)(vite@6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0))
 
 packages:
 
@@ -853,6 +862,9 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
+  '@types/node@24.0.3':
+    resolution: {integrity: sha512-R4I/kzCYAdRLzfiCabn9hxWfbuHS573x+r0dJMkkzThEa7pbrcDWK+9zu3e7aBOouf+rQAciqPFMnxwr0aWgKg==}
+
   '@types/prop-types@15.7.14':
     resolution: {integrity: sha512-gNMvNH49DJ7OJYv+KAKn0Xp45p8PLl6zo2YnvDIbTd4J6MER2BmWN49TG7n9LvkyihINxeKW8+3bfS2yDC9dzQ==}
 
@@ -1411,6 +1423,9 @@ packages:
   encode-utf8@1.0.3:
     resolution: {integrity: sha512-ucAnuBEhUK4boH2HjVYG5Q2mQyPorvv0u/ocS+zhdw0S8AlHYY+GOFhP1Gio5z4icpP2ivFSvhtFjQi8+T9ppw==}
 
+  encoding@0.1.13:
+    resolution: {integrity: sha512-ETBauow1T35Y/WZMkio9jiM0Z5xjHHmJ4XmjZOq1l/dXz3lr2sRn87nJy20RupqSh1F2m3HHPSp8ShIPQJrJ3A==}
+
   end-of-stream@1.4.4:
     resolution: {integrity: sha512-+uw1inIHVPQoaVuHzRyXd21icM+cnt4CzD5rW+NC1wjOUSTOs+Te7FOv7AhN7vS9x/oIyhLP5PR1H+phQAHu5Q==}
 
@@ -1580,6 +1595,20 @@ packages:
   fraction.js@4.3.7:
     resolution: {integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==}
 
+  framer-motion@11.18.2:
+    resolution: {integrity: sha512-5F5Och7wrvtLVElIpclDT0CBzMVg3dL22B64aZwHtsIY8RB4mXICLrkajK4G9R+ieSAGcgrLeae2SeUTg2pr6w==}
+    peerDependencies:
+      '@emotion/is-prop-valid': '*'
+      react: ^18.0.0 || ^19.0.0
+      react-dom: ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@emotion/is-prop-valid':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
+
   fsevents@2.3.2:
     resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -1680,6 +1709,10 @@ packages:
 
   https-browserify@1.0.0:
     resolution: {integrity: sha512-J+FkSdyD+0mA0N+81tMotaRMfSL9SGi+xpD3T6YApKsc3bGSXJlfXri3VyFOeYkfLRQisDk1W+jIFFKBeUBbBg==}
+
+  iconv-lite@0.6.3:
+    resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
+    engines: {node: '>=0.10.0'}
 
   idb-keyval@6.2.2:
     resolution: {integrity: sha512-yjD9nARJ/jb1g+CvD0tlhUHOrJ9Sy0P8T9MF3YaLlHnSRpwPfpTX0XIvpmw3gAJUmEu3FiICLBDPXVwyEvrleg==}
@@ -1925,6 +1958,12 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  motion-dom@11.18.1:
+    resolution: {integrity: sha512-g76KvA001z+atjfxczdRtw/RXOM3OMSdd1f4DL77qCTF/+avrRJiawSG4yDibEQ215sr9kpinSlX2pCTJ9zbhw==}
+
+  motion-utils@11.18.1:
+    resolution: {integrity: sha512-49Kt+HKjtbJKLtgO/LKj9Ld+6vw9BjH5d9sc40R/kVyH8GLAXgT42M2NnuPcJNuA3s9ZfZBUcwIgpmZWGEE+hA==}
+
   motion@10.16.2:
     resolution: {integrity: sha512-p+PurYqfUdcJZvtnmAqu5fJgV2kR0uLFQuBKtLeFVTrYEVllI99tiOTSefVNYuip9ELTEkepIIDftNdze76NAQ==}
 
@@ -2093,6 +2132,18 @@ packages:
   pify@2.3.0:
     resolution: {integrity: sha512-udgsAY+fTnvv7kI7aaxbqwWNb0AHiB0qBO89PZKPkoTmGOgdbrHDKD+0B2X4uTfJ/FT1R09r9gTsjUjNJotuog==}
     engines: {node: '>=0.10.0'}
+
+  pinata@2.4.8:
+    resolution: {integrity: sha512-5z2d9pe6q0fO+8GuH5ofy5uxZQtknFUD2K1C1BQ4sTrUKLmW3h0bRCSKWu9d8EQEjDp+2s27s4BXG83lBfW4Ig==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   pino-abstract-transport@0.5.0:
     resolution: {integrity: sha512-+KAgmVeqXYbTtU2FScx1XS3kNyfZ5TrXY07V96QnUSFqo2gAqlvmaxH67Lj7SWazqsMabf+58ctdTcBgnOLUOQ==}
@@ -2384,6 +2435,9 @@ packages:
     resolution: {integrity: sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA==}
     engines: {node: '>=10'}
 
+  safer-buffer@2.1.2:
+    resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
+
   scheduler@0.26.0:
     resolution: {integrity: sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA==}
 
@@ -2601,6 +2655,9 @@ packages:
 
   uncrypto@0.1.3:
     resolution: {integrity: sha512-Ql87qFHB3s/De2ClA9e0gsnS6zXG27SkTiSJwjCc9MebbfapQfuPzumMIUMi38ezPZVNFcHI9sUIepeQfw8J8Q==}
+
+  undici-types@7.8.0:
+    resolution: {integrity: sha512-9UJ2xGDvQ43tYyVMpuHlsgApydB8ZKfVYTsLDhXkFL/6gfkp+U8xTGdh8pMJv1SpZna0zxG1DwsKZsreLbXBxw==}
 
   unstorage@1.16.0:
     resolution: {integrity: sha512-WQ37/H5A7LcRPWfYOrDa1Ys02xAbpPJq6q5GkO88FBXVSQzHd7+BjEwfRqyaSWCv9MbsJy058GWjjPjcJ16GGA==}
@@ -2865,21 +2922,21 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.0': {}
 
-  '@algorandfoundation/algokit-subscriber@3.2.0(@algorandfoundation/algokit-utils@9.1.0(algosdk@3.3.0))(algosdk@3.3.0)':
+  '@algorandfoundation/algokit-subscriber@3.2.0(@algorandfoundation/algokit-utils@9.1.0(algosdk@3.3.0)(encoding@0.1.13))(algosdk@3.3.0)':
     dependencies:
-      '@algorandfoundation/algokit-utils': 9.1.0(algosdk@3.3.0)
+      '@algorandfoundation/algokit-utils': 9.1.0(algosdk@3.3.0)(encoding@0.1.13)
       algosdk: 3.3.0
       js-sha512: 0.9.0
 
-  '@algorandfoundation/algokit-utils@9.1.0(algosdk@3.3.0)':
+  '@algorandfoundation/algokit-utils@9.1.0(algosdk@3.3.0)(encoding@0.1.13)':
     dependencies:
-      '@algorandfoundation/tealscript': 0.106.3
+      '@algorandfoundation/tealscript': 0.106.3(encoding@0.1.13)
       algosdk: 3.3.0
       buffer: 6.0.3
     transitivePeerDependencies:
       - encoding
 
-  '@algorandfoundation/tealscript@0.106.3':
+  '@algorandfoundation/tealscript@0.106.3(encoding@0.1.13)':
     dependencies:
       '@microsoft/tsdoc': 0.14.2
       '@playwright/test': 1.52.0
@@ -2888,7 +2945,7 @@ snapshots:
       glob: 10.4.5
       hi-base32: 0.5.1
       js-sha512: 0.8.0
-      node-fetch: 2.7.0
+      node-fetch: 2.7.0(encoding@0.1.13)
       polytype: 0.17.0
       source-map: 0.7.4
       ts-morph: 20.0.0
@@ -3578,6 +3635,10 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
+  '@types/node@24.0.3':
+    dependencies:
+      undici-types: 7.8.0
+
   '@types/prop-types@15.7.14': {}
 
   '@types/react-dom@18.3.7(@types/react@18.3.23)':
@@ -3683,7 +3744,7 @@ snapshots:
       '@typescript-eslint/types': 8.33.0
       eslint-visitor-keys: 4.2.0
 
-  '@vitejs/plugin-react@4.5.0(vite@6.3.5(jiti@1.21.7)(yaml@2.8.0))':
+  '@vitejs/plugin-react@4.5.0(vite@6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0))':
     dependencies:
       '@babel/core': 7.27.3
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.27.3)
@@ -3691,7 +3752,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.9
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.3.5(jiti@1.21.7)(yaml@2.8.0)
+      vite: 6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -4459,6 +4520,11 @@ snapshots:
 
   encode-utf8@1.0.3: {}
 
+  encoding@0.1.13:
+    dependencies:
+      iconv-lite: 0.6.3
+    optional: true
+
   end-of-stream@1.4.4:
     dependencies:
       once: 1.4.0
@@ -4661,6 +4727,15 @@ snapshots:
 
   fraction.js@4.3.7: {}
 
+  framer-motion@11.18.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+    dependencies:
+      motion-dom: 11.18.1
+      motion-utils: 11.18.1
+      tslib: 2.8.1
+    optionalDependencies:
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+
   fsevents@2.3.2:
     optional: true
 
@@ -4767,6 +4842,11 @@ snapshots:
       minimalistic-crypto-utils: 1.0.1
 
   https-browserify@1.0.0: {}
+
+  iconv-lite@0.6.3:
+    dependencies:
+      safer-buffer: 2.1.2
+    optional: true
 
   idb-keyval@6.2.2: {}
 
@@ -4982,6 +5062,12 @@ snapshots:
 
   mkdirp@2.1.6: {}
 
+  motion-dom@11.18.1:
+    dependencies:
+      motion-utils: 11.18.1
+
+  motion-utils@11.18.1: {}
+
   motion@10.16.2:
     dependencies:
       '@motionone/animation': 10.18.0
@@ -5007,9 +5093,11 @@ snapshots:
 
   node-fetch-native@1.6.6: {}
 
-  node-fetch@2.7.0:
+  node-fetch@2.7.0(encoding@0.1.13):
     dependencies:
       whatwg-url: 5.0.0
+    optionalDependencies:
+      encoding: 0.1.13
 
   node-mock-http@1.0.0: {}
 
@@ -5171,6 +5259,11 @@ snapshots:
   picomatch@4.0.2: {}
 
   pify@2.3.0: {}
+
+  pinata@2.4.8(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+    optionalDependencies:
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
 
   pino-abstract-transport@0.5.0:
     dependencies:
@@ -5424,6 +5517,9 @@ snapshots:
 
   safe-stable-stringify@2.5.0: {}
 
+  safer-buffer@2.1.2:
+    optional: true
+
   scheduler@0.26.0: {}
 
   semver@6.3.1: {}
@@ -5665,6 +5761,8 @@ snapshots:
 
   uncrypto@0.1.3: {}
 
+  undici-types@7.8.0: {}
+
   unstorage@1.16.0(idb-keyval@6.2.2):
     dependencies:
       anymatch: 3.1.3
@@ -5736,15 +5834,15 @@ snapshots:
       - utf-8-validate
       - zod
 
-  vite-plugin-node-polyfills@0.23.0(rollup@4.41.1)(vite@6.3.5(jiti@1.21.7)(yaml@2.8.0)):
+  vite-plugin-node-polyfills@0.23.0(rollup@4.41.1)(vite@6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0)):
     dependencies:
       '@rollup/plugin-inject': 5.0.5(rollup@4.41.1)
       node-stdlib-browser: 1.3.1
-      vite: 6.3.5(jiti@1.21.7)(yaml@2.8.0)
+      vite: 6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0)
     transitivePeerDependencies:
       - rollup
 
-  vite@6.3.5(jiti@1.21.7)(yaml@2.8.0):
+  vite@6.3.5(@types/node@24.0.3)(jiti@1.21.7)(yaml@2.8.0):
     dependencies:
       esbuild: 0.25.5
       fdir: 6.4.5(picomatch@4.0.2)
@@ -5753,6 +5851,7 @@ snapshots:
       rollup: 4.41.1
       tinyglobby: 0.2.14
     optionalDependencies:
+      '@types/node': 24.0.3
       fsevents: 2.3.3
       jiti: 1.21.7
       yaml: 2.8.0
