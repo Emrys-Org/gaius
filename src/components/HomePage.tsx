@@ -51,52 +51,24 @@ export function HomePage() {
 
   const featureItems = [
     {
-      title: 'Create Loyalty Programs',
-      description: 'Design custom loyalty programs for your business with tiered rewards and point systems',
+      title: 'Earn & Redeem',
+      description: 'Collect loyalty points across multiple brands and redeem them for exclusive rewards',
       icon: '🏆'
     },
     {
-      title: 'Blockchain Security',
-      description: 'Leverage Algorand blockchain for transparent, secure, and immutable loyalty point tracking',
+      title: 'NFT Rewards',
+      description: 'Unlock special NFT collectibles as you reach loyalty milestones',
+      icon: '🎁'
+    },
+    {
+      title: 'Secure & Transparent',
+      description: 'Blockchain-powered loyalty program with complete transparency and security',
       icon: '🔒'
     },
     {
-      title: 'Customer Insights',
-      description: 'Gain valuable data on customer behavior and preferences through loyalty program engagement',
-      icon: '📊'
-    },
-    {
-      title: 'Multi-brand Integration',
-      description: 'Connect multiple businesses under a single loyalty ecosystem for enhanced customer value',
+      title: 'Cross-Brand Benefits',
+      description: 'Use your points across our entire partner network for maximum flexibility',
       icon: '🔄'
-    }
-  ];
-
-  // Sample loyalty program examples
-  const examplePrograms = [
-    {
-      name: "Coffee Rewards",
-      company: "Bean & Brew",
-      color: "#8B572A",
-      points: 350,
-      nextTier: "Gold Member",
-      progress: 70
-    },
-    {
-      name: "Fitness Club",
-      company: "ActiveLife Gym",
-      color: "#22C55E",
-      points: 120,
-      nextTier: "Silver Member",
-      progress: 40
-    },
-    {
-      name: "Bookstore Loyalty",
-      company: "Page Turner Books",
-      color: "#6366F1",
-      points: 200,
-      nextTier: "Bookworm Status",
-      progress: 55
     }
   ];
 
@@ -137,7 +109,7 @@ export function HomePage() {
               className="text-xl md:text-2xl max-w-3xl mx-auto mb-10 text-blue-100"
               variants={itemVariants}
             >
-              Create blockchain-powered loyalty programs that reward your customers and grow your business
+              The all-in-one blockchain-powered loyalty program that rewards you across multiple brands and services
             </motion.p>
             
             <motion.div 
@@ -149,7 +121,7 @@ export function HomePage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                Create Your Program
+                Get Started
               </motion.button>
               
               <motion.button 
@@ -182,13 +154,13 @@ export function HomePage() {
               className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white"
               variants={itemVariants}
             >
-              Powerful Loyalty Program Solutions
+              Why Choose Gaius Loyalty?
             </motion.h2>
             <motion.p 
               className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto"
               variants={itemVariants}
             >
-              Everything you need to create, manage, and grow customer loyalty programs on the blockchain
+              Our blockchain-powered platform offers unique benefits that traditional loyalty programs can't match
             </motion.p>
           </motion.div>
 
@@ -212,152 +184,82 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* Example Programs Section */}
+      {/* Loyalty Card Preview */}
       <div className="py-20 bg-gray-50 dark:bg-gray-800/30">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div 
-            className="text-center mb-16"
-            variants={itemVariants}
-          >
-            <motion.h2 
-              className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white"
-              variants={itemVariants}
-            >
-              Sample Loyalty Programs
-            </motion.h2>
-            <motion.p 
-              className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto"
-              variants={itemVariants}
-            >
-              See how businesses are using Gaius to create engaging loyalty experiences
-            </motion.p>
-          </motion.div>
-
-          <motion.div 
-            className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            className="flex flex-col md:flex-row items-center gap-12"
             variants={containerVariants}
           >
-            {examplePrograms.map((program, index) => (
-              <motion.div
-                key={index}
-                className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-lg"
-                variants={cardVariants}
-                whileHover="hover"
-              >
-                <div 
-                  className="h-3"
-                  style={{ backgroundColor: program.color }}
-                ></div>
-                <div className="p-6">
-                  <div className="flex justify-between items-start">
+            <motion.div 
+              className="md:w-1/2"
+              variants={itemVariants}
+            >
+              <h2 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white">Your Digital Loyalty Card</h2>
+              <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
+                Manage all your loyalty points in one place with our digital wallet and NFT-based rewards system.
+              </p>
+              <ul className="space-y-4">
+                {['Track points across multiple brands', 'Redeem for exclusive rewards', 'Collect unique NFTs', 'Secure blockchain storage'].map((item, i) => (
+                  <motion.li 
+                    key={i}
+                    className="flex items-center text-gray-700 dark:text-gray-200"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 + (i * 0.1) }}
+                  >
+                    <svg className="w-5 h-5 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    {item}
+                  </motion.li>
+                ))}
+              </ul>
+            </motion.div>
+            
+            <motion.div 
+              className="md:w-1/2 mt-10 md:mt-0"
+              variants={itemVariants}
+              whileHover={{ scale: 1.05, rotate: 2 }}
+              transition={{ type: "spring", stiffness: 300 }}
+            >
+              <div className="relative w-full max-w-md mx-auto">
+                {/* Card background with gradient */}
+                <div className="aspect-[1.586/1] rounded-2xl bg-gradient-to-br from-blue-600 to-purple-700 shadow-2xl p-6 relative overflow-hidden">
+                  {/* Card decoration elements */}
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full -translate-y-1/2 translate-x-1/4"></div>
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-yellow-400 opacity-10 rounded-full translate-y-1/2 -translate-x-1/4"></div>
+                  
+                  {/* Card content */}
+                  <div className="relative z-10 h-full flex flex-col justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">{program.name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{program.company}</p>
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-2xl font-bold text-white">Gaius Gold</h3>
+                        <div className="text-xl text-yellow-400">★★★</div>
+                      </div>
+                      <p className="text-blue-100 opacity-80 mt-1">Member since 2023</p>
                     </div>
-                    <div 
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                      style={{ backgroundColor: program.color }}
-                    >
-                      {program.company.charAt(0)}
+                    
+                    <div>
+                      <div className="mb-2">
+                        <p className="text-xs text-blue-100 opacity-70">MEMBER</p>
+                        <p className="text-lg text-white font-medium truncate">{activeAddress ? activeAddress.substring(0, 8) + '...' + activeAddress.substring(activeAddress.length - 4) : 'Connect Your Wallet'}</p>
+                      </div>
+                      
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-xs text-blue-100 opacity-70">POINTS BALANCE</p>
+                          <p className="text-2xl font-bold text-white">1,250</p>
+                        </div>
+                        <div className="text-white opacity-80 text-4xl">G</div>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="mt-6">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600 dark:text-gray-300">Current Points</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{program.points}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                      <div 
-                        className="h-2.5 rounded-full" 
-                        style={{ 
-                          width: `${program.progress}%`,
-                          backgroundColor: program.color
-                        }}
-                      ></div>
-                    </div>
-                    <div className="flex justify-between text-xs mt-1">
-                      <span className="text-gray-500 dark:text-gray-400">Progress to {program.nextTier}</span>
-                      <span className="text-gray-500 dark:text-gray-400">{program.progress}%</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-                    <button
-                      className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      View Program Details
-                    </button>
                   </div>
                 </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </div>
-
-      {/* How It Works Section */}
-      <div className="py-20 bg-white dark:bg-[#001324]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div 
-            className="text-center mb-16"
-            variants={itemVariants}
-          >
-            <motion.h2 
-              className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white"
-              variants={itemVariants}
-            >
-              How Gaius Works
-            </motion.h2>
-            <motion.p 
-              className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto"
-              variants={itemVariants}
-            >
-              Simple steps to create and manage your blockchain loyalty program
-            </motion.p>
-          </motion.div>
-
-          <motion.div 
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
-            variants={containerVariants}
-          >
-            <motion.div
-              className="text-center"
-              variants={itemVariants}
-            >
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
-                1
+                
+                {/* Reflection/shine effect */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/0 via-white/30 to-white/0 opacity-20"></div>
               </div>
-              <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Create Program</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Design your loyalty program with custom tiers, points, and rewards
-              </p>
-            </motion.div>
-
-            <motion.div
-              className="text-center"
-              variants={itemVariants}
-            >
-              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
-                2
-              </div>
-              <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Engage Customers</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Customers join your program and earn points through purchases and actions
-              </p>
-            </motion.div>
-
-            <motion.div
-              className="text-center"
-              variants={itemVariants}
-            >
-              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
-                3
-              </div>
-              <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Grow Business</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Analyze data, optimize rewards, and increase customer retention
-              </p>
             </motion.div>
           </motion.div>
         </div>
@@ -370,14 +272,14 @@ export function HomePage() {
             className="text-3xl md:text-4xl font-bold mb-6"
             variants={itemVariants}
           >
-            Ready to Transform Your Customer Loyalty?
+            Ready to Join Gaius Loyalty?
           </motion.h2>
           
           <motion.p 
             className="text-xl text-blue-100 max-w-3xl mx-auto mb-10"
             variants={itemVariants}
           >
-            Join businesses using Gaius to create engaging, blockchain-powered loyalty programs
+            Connect your wallet now to start earning rewards and collecting unique NFTs
           </motion.p>
           
           <motion.button 
@@ -386,7 +288,7 @@ export function HomePage() {
             whileTap={{ scale: 0.95 }}
             variants={itemVariants}
           >
-            Get Started Now
+            Connect Wallet & Start Earning
           </motion.button>
         </div>
       </div>

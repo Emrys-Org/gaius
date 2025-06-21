@@ -283,7 +283,7 @@ export function NFTDashboard() {
               }`}
               onClick={() => setActiveTab('mint')}
             >
-              Mint NFT  
+              Mint NFT
             </button>
             <button
               className={`py-3 px-6 font-medium text-lg ${
