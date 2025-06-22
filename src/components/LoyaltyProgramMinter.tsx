@@ -24,11 +24,11 @@ interface LoyaltyProgramData {
   companyName: string;
   bannerFile: File | null;
   bannerUrl: string;
-  
+
   // Step 2: Rewards
   rewardTiers: RewardTier[];
   pointsPerAction: number;
-  
+
   // Step 3: Appearance
   primaryColor: string;
   secondaryColor: string;
@@ -106,7 +106,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
           // Add more data as needed
           website: `${EXPLORER_URL}/account/${activeAddress}`,
         };
-        
+
         const qrCodeUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
           width: 200,
           margin: 2,
@@ -135,24 +135,24 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
       if (!file.type.startsWith('image/')) {
         alert('Please select an image file for the banner');
         return;
-      }
+    }
       
       setUploadingBanner(true);
-      
-      try {
+    
+    try {
         // Upload to IPFS
         const result = await pinFileToIPFS(file);
-        
-        if (result.success && result.cid) {
+      
+      if (result.success && result.cid) {
           const ipfsUrl = `https://gateway.pinata.cloud/ipfs/${result.cid}`;
           updateFormData({
             bannerFile: file,
             bannerUrl: ipfsUrl
           });
-        } else {
+      } else {
           throw new Error(result.message || 'Failed to upload banner');
-        }
-      } catch (error: any) {
+      }
+    } catch (error: any) {
         console.error('Error uploading banner:', error);
         alert(`Error uploading banner: ${error.message}`);
       } finally {
@@ -418,7 +418,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
                   src={formData.bannerUrl} 
                   alt="Card Background" 
                   className="w-full h-full object-cover opacity-30"
-                />
+          />
                 <div className="absolute inset-0 bg-gradient-to-br from-black/20 to-black/40"></div>
               </div>
             )}
@@ -715,7 +715,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
                   onClick={() => updateFormData({ primaryColor: color })}
                   className="w-8 h-8 rounded-full border-2 border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
                   style={{ backgroundColor: color }}
-                />
+          />
               ))}
             </div>
           </div>
@@ -737,7 +737,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
                   onClick={() => updateFormData({ secondaryColor: color })}
                   className="w-8 h-8 rounded-full border-2 border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
                   style={{ backgroundColor: color }}
-                />
+          />
               ))}
             </div>
           </div>
@@ -759,7 +759,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
                   onClick={() => updateFormData({ accentColor: color })}
                   className="w-8 h-8 rounded-full border-2 border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
                   style={{ backgroundColor: color }}
-                />
+          />
               ))}
             </div>
           </div>
@@ -827,7 +827,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
               onClick={prevStep}
               disabled={currentStep === 1}
               className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+      >
               <ChevronLeft size={20} />
               Previous
       </button>
