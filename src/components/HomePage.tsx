@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { useWallet } from '@txnlab/use-wallet-react';
 import { motion } from 'framer-motion';
 
-export function HomePage() {
+interface HomePageProps {
+  onNavigate: (page: 'home' | 'loyalty-dashboard' | 'create-program') => void;
+}
+
+export function HomePage({ onNavigate }: HomePageProps) {
   const { activeAddress } = useWallet();
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -56,8 +60,8 @@ export function HomePage() {
       icon: '🏆'
     },
     {
-      title: 'NFT Rewards',
-      description: 'Unlock special NFT collectibles as you reach loyalty milestones',
+      title: 'Loyalty Rewards',
+      description: 'Unlock special loyalty collectibles as you reach loyalty milestones',
       icon: '🎁'
     },
     {
@@ -113,24 +117,60 @@ export function HomePage() {
             </motion.p>
             
             <motion.div 
-              className="flex flex-col sm:flex-row gap-4 justify-center"
+              className="flex flex-col lg:flex-row gap-8 justify-center items-center"
               variants={itemVariants}
             >
-              <motion.button 
-                className="px-8 py-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full font-bold text-lg shadow-lg hover:shadow-xl transition-all"
+              <motion.div 
+                className="text-center"
+                whileHover={{ scale: 1.02 }}
+              >
+                              <motion.button 
+                onClick={() => {
+                  if (!activeAddress) {
+                    alert('Please connect your wallet first to create a loyalty program');
+                    return;
+                  }
+                  onNavigate('create-program');
+                }}
+                className="group px-10 py-5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full font-bold text-xl shadow-xl hover:shadow-2xl transition-all text-gray-900 relative overflow-hidden mb-3"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                Get Started
+                <span className="relative z-10 flex items-center gap-2">
+                  🚀 Try For Free
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </motion.button>
+              <p className="text-sm text-blue-100 opacity-90">
+                {!activeAddress ? 'Connect wallet to get started' : 'Create your first loyalty program'}
+              </p>
+              </motion.div>
               
-              <motion.button 
-                className="px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full font-bold text-lg hover:bg-white/20 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <motion.div 
+                className="text-center"
+                whileHover={{ scale: 1.02 }}
               >
-                Learn More
-              </motion.button>
+                <motion.button 
+                  onClick={() => {
+                    if (!activeAddress) {
+                      alert('Please connect your wallet first to access the organization dashboard');
+                      return;
+                    }
+                    onNavigate('loyalty-dashboard');
+                  }}
+                  className="group px-10 py-5 bg-white/10 backdrop-blur-md border-2 border-white/30 rounded-full font-bold text-xl hover:bg-white/20 hover:border-white/50 transition-all relative overflow-hidden mb-3"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    🏢 Organization Dashboard
+                  </span>
+                  <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </motion.button>
+                <p className="text-sm text-blue-100 opacity-90">
+                  {!activeAddress ? 'Connect wallet to access dashboard' : 'Manage existing programs'}
+                </p>
+              </motion.div>
             </motion.div>
           </motion.div>
         </div>
@@ -197,10 +237,10 @@ export function HomePage() {
             >
               <h2 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white">Your Digital Loyalty Card</h2>
               <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
-                Manage all your loyalty points in one place with our digital wallet and NFT-based rewards system.
+                Manage all your loyalty points in one place with our digital wallet and loyalty rewards system.
               </p>
               <ul className="space-y-4">
-                {['Track points across multiple brands', 'Redeem for exclusive rewards', 'Collect unique NFTs', 'Secure blockchain storage'].map((item, i) => (
+                {['Track points across multiple brands', 'Redeem for exclusive rewards', 'Collect unique loyalty rewards', 'Secure blockchain storage'].map((item, i) => (
                   <motion.li 
                     key={i}
                     className="flex items-center text-gray-700 dark:text-gray-200"
@@ -279,16 +319,23 @@ export function HomePage() {
             className="text-xl text-blue-100 max-w-3xl mx-auto mb-10"
             variants={itemVariants}
           >
-            Connect your wallet now to start earning rewards and collecting unique NFTs
+            Connect your wallet now to start earning rewards and collecting unique loyalty rewards
           </motion.p>
           
           <motion.button 
+            onClick={() => {
+              if (!activeAddress) {
+                alert('Please connect your wallet first to create a loyalty program');
+                return;
+              }
+              onNavigate('create-program');
+            }}
             className="px-8 py-4 bg-white text-blue-600 rounded-full font-bold text-lg shadow-lg hover:shadow-xl transition-all"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             variants={itemVariants}
           >
-            Connect Wallet & Start Earning
+            {!activeAddress ? 'Connect Wallet & Start Earning' : 'Create Loyalty Program'}
           </motion.button>
         </div>
       </div>
