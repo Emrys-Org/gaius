@@ -1,11 +1,11 @@
-import { useWallet } from '@txnlab/use-wallet-react';
-import { useAccountInfo, useNfd, NfdAvatar } from '@txnlab/use-wallet-ui-react';
-import { formatNumber, formatShortAddress } from '@txnlab/utils-ts';
+import { useWallet } from '@txnlab/use-wallet-react'
+import { useAccountInfo, useNfd, NfdAvatar } from '@txnlab/use-wallet-ui-react'
+import { formatNumber, formatShortAddress } from '@txnlab/utils-ts'
 
 export function WalletInfo() {
-  const { activeAddress } = useWallet();
-  const nfdQuery = useNfd();
-  const accountQuery = useAccountInfo();
+  const { activeAddress } = useWallet()
+  const nfdQuery = useNfd()
+  const accountQuery = useAccountInfo()
 
   if (!activeAddress) {
     return (
@@ -17,7 +17,7 @@ export function WalletInfo() {
           Connect your Algorand wallet to view your NFD profile and balance
         </p>
       </div>
-    );
+    )
   }
 
   if (nfdQuery.isLoading || accountQuery.isLoading) {
@@ -27,12 +27,12 @@ export function WalletInfo() {
           Loading wallet data...
         </p>
       </div>
-    );
+    )
   }
 
-  const nfd = nfdQuery.data ?? null;
-  const accountInfo = accountQuery.data;
-  const algoBalance = accountInfo ? Number(accountInfo.amount) / 1_000_000 : 0;
+  const nfd = nfdQuery.data ?? null
+  const accountInfo = accountQuery.data
+  const algoBalance = accountInfo ? Number(accountInfo.amount) / 1_000_000 : 0
 
   return (
     <div className="p-8 bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -79,11 +79,11 @@ export function WalletInfo() {
                       {value}
                     </p>
                   </div>
-                )
+                ),
               )}
             </div>
           </div>
         )}
     </div>
-  );
+  )
 }
