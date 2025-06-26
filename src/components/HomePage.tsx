@@ -3,7 +3,7 @@ import { useWallet } from '@txnlab/use-wallet-react';
 import { motion } from 'framer-motion';
 
 interface HomePageProps {
-  onNavigate: (page: 'home' | 'loyalty-dashboard' | 'create-program') => void;
+  onNavigate: (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass') => void;
 }
 
 export function HomePage({ onNavigate }: HomePageProps) {
@@ -169,6 +169,32 @@ export function HomePage({ onNavigate }: HomePageProps) {
                 </motion.button>
                 <p className="text-sm text-blue-100 opacity-90">
                   {!activeAddress ? 'Connect wallet to access dashboard' : 'Manage existing programs'}
+                </p>
+              </motion.div>
+              
+              <motion.div 
+                className="text-center"
+                whileHover={{ scale: 1.02 }}
+              >
+                <motion.button 
+                  onClick={() => {
+                    if (!activeAddress) {
+                      alert('Please connect your wallet first to send loyalty passes');
+                      return;
+                    }
+                    onNavigate('send-pass');
+                  }}
+                  className="group px-10 py-5 bg-white/10 backdrop-blur-md border-2 border-white/30 rounded-full font-bold text-xl hover:bg-white/20 hover:border-white/50 transition-all relative overflow-hidden mb-3"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    📨 Send Pass
+                  </span>
+                  <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </motion.button>
+                <p className="text-sm text-blue-100 opacity-90">
+                  {!activeAddress ? 'Connect wallet to send passes' : 'Send loyalty passes to members'}
                 </p>
               </motion.div>
             </motion.div>

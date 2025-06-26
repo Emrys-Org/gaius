@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import algosdk from 'algosdk';
 import { LoyaltyProgramMinter } from './LoyaltyProgramMinter';
-import { MemberRegistrationForm } from './MemberRegistrationForm';
+import { LoyaltyPassTransfer } from './LoyaltyPassTransfer';
 import { getAlgodClient, getNetworkConfig } from '../utils/algod';
 import { getIPFSGatewayURL } from '../utils/pinata';
 import * as QRCode from 'qrcode';
-import { QrCode, Download, BarChart3, Users, Trophy, Settings, Eye, Plus, TrendingUp, Award, Star, X, Calendar, MapPin, Palette, CreditCard, Send, Wallet, UserPlus, Link, Share2 } from 'lucide-react';
+import { QrCode, Download, BarChart3, Users, Trophy, Settings, Eye, Plus, TrendingUp, Award, Star, X, Calendar, MapPin, Palette, CreditCard, Send, Wallet, ExternalLink, ArrowRight } from 'lucide-react';
 
 interface LoyaltyProgramInfo {
   id: number;
@@ -23,12 +23,14 @@ interface LoyaltyProgramInfo {
 
 interface Member {
   id: string;
+  address: string; // Algorand wallet address
   name: string;
   email: string;
   joinDate: string;
   totalPoints: number;
   currentTier: string;
   avatar?: string;
+  assetIds: number[]; // IDs of loyalty passes owned
 }
 
 interface LeaderboardEntry {
@@ -83,68 +85,24 @@ export function LoyaltyProgramDashboard() {
   const { activeNetwork } = useNetwork();
   const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<LoyaltyProgramInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'add-member' | 'create'>('overview');
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'create' | 'transfer'>('overview');
   const [error, setError] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [selectedProgram, setSelectedProgram] = useState<LoyaltyProgramInfo | null>(null);
   const [showProgramDetails, setShowProgramDetails] = useState(false);
-  const [showNFTPassModal, setShowNFTPassModal] = useState(false);
+  const [showLoyaltyPassModal, setShowLoyaltyPassModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [issuingNFTPass, setIssuingNFTPass] = useState(false);
+  const [issuingLoyaltyPass, setIssuingLoyaltyPass] = useState(false);
   const [nftPassResult, setNftPassResult] = useState<{ success: boolean; message: string; assetId?: number } | null>(null);
   const [recipientAddress, setRecipientAddress] = useState('');
   const [selectedProgramId, setSelectedProgramId] = useState(0);
-  const [showShareableLink, setShowShareableLink] = useState(false);
-  const [shareableLinkProgram, setShareableLinkProgram] = useState<LoyaltyProgramInfo | null>(null);
+  const [isTransferringPass, setIsTransferringPass] = useState(false);
+  const [pendingTransferAssetId, setPendingTransferAssetId] = useState<number | null>(null);
   
-  // Mock data for demonstration
-  const [members] = useState<Member[]>([
-    {
-      id: '1',
-      name: 'Alice Johnson',
-      email: 'alice@example.com',
-      joinDate: '2024-01-15',
-      totalPoints: 2450,
-      currentTier: 'Gold',
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150'
-    },
-    {
-      id: '2',
-      name: 'Bob Smith',
-      email: 'bob@example.com',
-      joinDate: '2024-02-20',
-      totalPoints: 1800,
-      currentTier: 'Silver',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'
-    },
-    {
-      id: '3',
-      name: 'Carol Davis',
-      email: 'carol@example.com',
-      joinDate: '2024-03-10',
-      totalPoints: 3200,
-      currentTier: 'Platinum',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150'
-    },
-    {
-      id: '4',
-      name: 'David Wilson',
-      email: 'david@example.com',
-      joinDate: '2024-01-05',
-      totalPoints: 950,
-      currentTier: 'Bronze',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'
-    },
-    {
-      id: '5',
-      name: 'Eva Martinez',
-      email: 'eva@example.com',
-      joinDate: '2024-02-28',
-      totalPoints: 1650,
-      currentTier: 'Silver',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
-    }
-  ]);
+  // Real members data from blockchain
+  const [members, setMembers] = useState<Member[]>([]);
 
   const leaderboard: LeaderboardEntry[] = members
     .sort((a, b) => b.totalPoints - a.totalPoints)
@@ -192,16 +150,25 @@ export function LoyaltyProgramDashboard() {
     }
   };
 
+  // Fetch user loyalty programs when component loads
   useEffect(() => {
     if (activeAddress) {
       fetchUserLoyaltyPrograms();
     }
   }, [activeAddress, activeNetwork]); // Always fetch when address or network changes
+  
+  // Fetch members when tab changes to 'members'
+  useEffect(() => {
+    if (activeAddress && activeTab === 'members') {
+      fetchLoyaltyProgramMembers();
+    }
+  }, [activeAddress, activeTab, activeNetwork]);
 
   // Clear programs and refetch when network changes
   useEffect(() => {
     if (activeAddress) {
       setUserLoyaltyPrograms([]); // Clear existing programs
+      setMembers([]); // Clear existing members
       fetchUserLoyaltyPrograms(); // Refetch for new network
     }
   }, [activeNetwork]); // Only trigger on network change
@@ -216,6 +183,13 @@ export function LoyaltyProgramDashboard() {
       return () => clearInterval(interval);
     }
   }, [activeAddress, activeTab]);
+
+  // Fetch members when on members tab or when programs change
+  useEffect(() => {
+    if (activeAddress && (activeTab === 'members' || activeTab === 'leaderboard')) {
+      fetchLoyaltyProgramMembers();
+    }
+  }, [activeAddress, activeTab, userLoyaltyPrograms]);
 
   const fetchUserLoyaltyPrograms = async () => {
     if (!activeAddress) return;
@@ -251,8 +225,9 @@ export function LoyaltyProgramDashboard() {
           
           // Handle bigint total supply
           const totalSupply = typeof params.total === 'bigint' ? Number(params.total) : Number(params.total);
+          const decimals = typeof params.decimals === 'bigint' ? Number(params.decimals) : Number(params.decimals);
           
-          const isLoyaltyProgram = totalSupply === 1 && params.decimals === 0;
+          const isLoyaltyProgram = totalSupply === 1 && decimals === 0;
           
           if (isLoyaltyProgram) {
             // Get the asset URL
@@ -328,44 +303,174 @@ export function LoyaltyProgramDashboard() {
     }
   };
 
+  // Fetch members who have received loyalty passes
+  const fetchLoyaltyProgramMembers = async () => {
+    if (!activeAddress || userLoyaltyPrograms.length === 0) return;
+    
+    setIsMembersLoading(true);
+    setMembersError(null);
+    
+    try {
+      // Get network-specific algod client and indexer
+      const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+      const networkConfig = getNetworkConfig(networkType);
+      
+      // Create an indexer client to search for assets
+      const indexerClient = new algosdk.Indexer(
+        networkConfig.algodToken,
+        networkConfig.indexerUrl,
+        networkConfig.algodPort
+      );
+      
+      const membersMap = new Map<string, Member>();
+      
+      // For each loyalty program, find all loyalty passes created from it
+      for (const program of userLoyaltyPrograms) {
+        try {
+          // Search for assets created by the organization
+          const searchResults = await indexerClient.searchForAssets()
+            .creator(activeAddress)
+            .do();
+            
+          const assets = searchResults.assets || [];
+          
+          // Filter assets that are likely loyalty passes (total supply of 1, decimals 0)
+          // and have the program name in their name
+          for (const asset of assets) {
+            // Skip the program asset itself
+            const assetIndex = typeof asset.index === 'bigint' ? Number(asset.index) : Number(asset.index);
+            const programId = typeof program.id === 'bigint' ? Number(program.id) : Number(program.id);
+            if (assetIndex === programId) continue;
+            
+            // Check if it's a loyalty pass (total supply of 1 and decimals of 0)
+            const params = asset.params;
+            const totalSupply = typeof params.total === 'bigint' ? Number(params.total) : Number(params.total);
+            const decimals = typeof params.decimals === 'bigint' ? Number(params.decimals) : Number(params.decimals);
+            const isLoyaltyPass = totalSupply === 1 && decimals === 0;
+            
+            // Check if the asset name contains the program name (case insensitive)
+            const assetName = params.name || '';
+            const isProgramPass = assetName.toLowerCase().includes(program.name.toLowerCase());
+            
+            if (isLoyaltyPass && isProgramPass) {
+              try {
+                // Find the current holder of this asset
+                const holderInfo = await indexerClient.lookupAssetBalances(asset.index).do();
+                const holders = holderInfo.balances || [];
+                
+                // Find holder with non-zero balance
+                const currentHolder = holders.find(h => {
+                  const amount = typeof h.amount === 'bigint' ? Number(h.amount) : h.amount;
+                  return amount > 0 && h.address !== activeAddress; // Skip if the organization still holds it
+                });
+                
+                if (currentHolder) {
+                  const holderAddress = currentHolder.address;
+                  let memberInfo: Member;
+                  
+                  // Check if we already have this member in our map
+                  if (membersMap.has(holderAddress)) {
+                    memberInfo = membersMap.get(holderAddress)!;
+                    // Add this asset to their list
+                    memberInfo.assetIds.push(typeof asset.index === 'bigint' ? Number(asset.index) : asset.index);
+                  } else {
+                    // Try to fetch metadata from the asset to get member details
+                    let memberName = "Unknown Member";
+                    let memberEmail = "";
+                    let memberTier = "Bronze";
+                    let memberPoints = 0;
+                    let joinDate = new Date().toISOString();
+                    
+                    // Try to get metadata from the asset URL
+                    if (params.url) {
+                      try {
+                        const url = getIPFSGatewayURL(params.url);
+                        const response = await fetch(url);
+                        
+                        if (response.ok) {
+                          const metadata = await response.json();
+                          
+                          // Extract member information from metadata
+                          if (metadata.member) {
+                            memberName = metadata.member.name || memberName;
+                            memberEmail = metadata.member.email || memberEmail;
+                            memberTier = metadata.member.tier || memberTier;
+                            memberPoints = metadata.member.points || memberPoints;
+                            joinDate = metadata.member.joinDate || metadata.issuedAt || joinDate;
+                          }
+                        }
+                      } catch (e) {
+                        console.warn(`Failed to fetch metadata for asset ${asset.index}`, e);
+                      }
+                    }
+                    
+                    // Create new member entry
+                    memberInfo = {
+                      id: holderAddress.substring(0, 8),
+                      address: holderAddress,
+                      name: memberName,
+                      email: memberEmail,
+                      joinDate: joinDate,
+                      totalPoints: memberPoints,
+                      currentTier: memberTier,
+                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=random`,
+                      assetIds: [typeof asset.index === 'bigint' ? Number(asset.index) : asset.index]
+                    };
+                    
+                    membersMap.set(holderAddress, memberInfo);
+                  }
+                }
+              } catch (e) {
+                console.warn(`Error fetching holder for asset ${asset.index}:`, e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`Error searching for assets related to program ${program.id}:`, e);
+        }
+      }
+      
+      // Convert map to array
+      const membersArray = Array.from(membersMap.values());
+      
+      // Update members state
+      setMembers(membersArray);
+      
+      // Add activity for new members
+      if (membersArray.length > 0) {
+        const newActivity = {
+          id: `members-${Date.now()}`,
+          type: 'members_fetched',
+          message: `Found ${membersArray.length} members with loyalty passes`,
+          timestamp: new Date().toISOString(),
+          color: 'green'
+        };
+        
+        setRecentActivities(prev => {
+          // Check if we already have a similar activity
+          const hasSimilar = prev.some(a => a.type === 'members_fetched');
+          if (!hasSimilar) {
+            return [newActivity, ...prev].slice(0, 5);
+          }
+          return prev;
+        });
+      }
+    } catch (error: any) {
+      console.error('Error fetching loyalty program members:', error);
+      setMembersError(`Error fetching members: ${error.message || 'Unknown error'}`);
+      
+      // If we failed to fetch real members, use empty array
+      setMembers([]);
+    } finally {
+      setIsMembersLoading(false);
+    }
+  };
+
   const handleLoyaltyProgramMinted = () => {
     // Refresh the loyalty program list immediately to update overview
     fetchUserLoyaltyPrograms();
     // Switch to programs tab to show the new program
     setActiveTab('programs');
-  };
-
-  const generateShareableLink = (program: LoyaltyProgramInfo) => {
-    const baseUrl = window.location.origin;
-    const programName = encodeURIComponent(program.name);
-    const companyName = encodeURIComponent(program.metadata?.co || program.metadata?.company || 'Company');
-    return `${baseUrl}/register?programId=${program.id}&program=${programName}&company=${companyName}`;
-  };
-
-  const handleShareableLink = (program: LoyaltyProgramInfo) => {
-    setShareableLinkProgram(program);
-    setShowShareableLink(true);
-  };
-
-  const closeShareableLink = () => {
-    setShowShareableLink(false);
-    setShareableLinkProgram(null);
-  };
-
-  const handleMemberRegistrationSuccess = (member: any) => {
-    // Add the new member to recent activities
-    const newActivity = {
-      id: `member-${member.id}`,
-      type: 'member_joined',
-      message: `${member.fullName} joined the loyalty program`,
-      timestamp: new Date().toISOString(),
-      color: 'green'
-    };
-    
-    setRecentActivities(prev => [newActivity, ...prev].slice(0, 5));
-    
-    // Switch to members tab to show the new member
-    setActiveTab('members');
   };
 
   const handleProgramClick = (program: LoyaltyProgramInfo) => {
@@ -378,29 +483,29 @@ export function LoyaltyProgramDashboard() {
     setSelectedProgram(null);
   };
 
-  const handleIssueNFTPass = (member: Member) => {
+  const handleIssueLoyaltyPass = (member: Member) => {
     setSelectedMember(member);
-    setShowNFTPassModal(true);
-    setNftPassResult(null);
-    setRecipientAddress('');
     setSelectedProgramId(userLoyaltyPrograms[0]?.id || 0);
+    setShowLoyaltyPassModal(true);
+    setNftPassResult(null);
   };
 
-  const closeNFTPassModal = () => {
-    setShowNFTPassModal(false);
+  const closeLoyaltyPassModal = () => {
+    setShowLoyaltyPassModal(false);
     setSelectedMember(null);
     setNftPassResult(null);
     setRecipientAddress('');
     setSelectedProgramId(0);
+    setPendingTransferAssetId(null);
   };
 
-  const issueNFTPass = async (recipientAddress: string) => {
+  const issueLoyaltyPass = async (recipientAddress: string) => {
     if (!activeAddress || !selectedMember || userLoyaltyPrograms.length === 0) {
       setNftPassResult({ success: false, message: 'Missing required information' });
       return;
     }
 
-    setIssuingNFTPass(true);
+    setIssuingLoyaltyPass(true);
     setNftPassResult(null);
 
     try {
@@ -414,7 +519,7 @@ export function LoyaltyProgramDashboard() {
       // Select the chosen loyalty program for the pass
       const loyaltyProgram = userLoyaltyPrograms.find(p => p.id === selectedProgramId) || userLoyaltyPrograms[0];
       
-      // Create NFT pass metadata
+      // Create Loyalty Program Pass metadata
       const passMetadata = {
         name: `${loyaltyProgram.name} - ${selectedMember.currentTier} Pass`,
         description: `Loyalty pass for ${selectedMember.name} in ${loyaltyProgram.name} program`,
@@ -438,7 +543,7 @@ export function LoyaltyProgramDashboard() {
         network: activeNetwork,
         version: '1.0'
       };
-
+      
       // Convert metadata to Uint8Array for note field
       const metadataStr = JSON.stringify(passMetadata);
       const metadataBytes = new Uint8Array(Buffer.from(metadataStr));
@@ -448,13 +553,13 @@ export function LoyaltyProgramDashboard() {
         throw new Error(`Metadata too large: ${metadataBytes.length} bytes (max: 1024 bytes). Please reduce member information.`);
       }
 
-      // Create asset creation transaction for the NFT pass
+      // Create asset creation transaction for the Loyalty Program Pass
       const txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
         sender: activeAddress,
         total: 1,
         decimals: 0,
-        assetName: `${loyaltyProgram.name} Pass`,
-        unitName: `${selectedMember.currentTier.toUpperCase()}PASS`,
+        assetName: `${loyaltyProgram.name} Pass - ${selectedMember.name}`,
+        unitName: 'PASS',
         assetURL: loyaltyProgram.imageUrl,
         note: metadataBytes,
         defaultFrozen: false,
@@ -483,7 +588,7 @@ export function LoyaltyProgramDashboard() {
         // Get the asset ID from the confirmed transaction
         const assetId = Number(confirmedTxn.assetIndex);
         
-        // If recipient address is provided and different from sender, transfer the NFT
+        // If recipient address is provided and different from sender, transfer the Loyalty Program Pass
         if (recipientAddress && recipientAddress !== activeAddress) {
           try {
             // Create transfer transaction
@@ -504,21 +609,23 @@ export function LoyaltyProgramDashboard() {
               
               setNftPassResult({ 
                 success: true, 
-                message: `NFT Loyalty Pass issued and transferred to ${recipientAddress}!`, 
+                message: `Loyalty Program Pass (Asset ID: ${assetId}) successfully transferred to ${recipientAddress}!`, 
                 assetId 
               });
             }
           } catch (transferError) {
             setNftPassResult({ 
               success: true, 
-              message: `NFT Loyalty Pass created (Asset ID: ${assetId}) but transfer failed. You can manually transfer it later.`, 
+              message: `Loyalty Program Pass created (Asset ID: ${assetId}) but transfer failed. You can manually transfer it using the button below.`, 
               assetId 
             });
+            // Set the pending transfer asset ID so we can show the transfer button
+            setPendingTransferAssetId(assetId);
           }
         } else {
           setNftPassResult({ 
             success: true, 
-            message: `NFT Loyalty Pass created successfully! Asset ID: ${assetId}`, 
+            message: `Loyalty Program Pass created successfully! Asset ID: ${assetId}`, 
             assetId 
           });
         }
@@ -526,13 +633,81 @@ export function LoyaltyProgramDashboard() {
         throw new Error('Failed to sign transaction');
       }
     } catch (error: any) {
-      console.error('Error issuing NFT pass:', error);
+      console.error('Error issuing Loyalty Pass:', error);
       setNftPassResult({ 
         success: false, 
-        message: `Error issuing NFT pass: ${error.message || 'Unknown error'}` 
+        message: `Error issuing Loyalty Pass: ${error.message || 'Unknown error'}`
       });
     } finally {
-      setIssuingNFTPass(false);
+      setIssuingLoyaltyPass(false);
+    }
+  };
+
+  // Function to transfer a loyalty pass to a recipient
+  const transferLoyaltyPass = async (assetId: number, recipientAddress: string) => {
+    if (!activeAddress || !signTransactions || !assetId || !recipientAddress) {
+      setNftPassResult({ 
+        success: false, 
+        message: 'Missing required information for transfer' 
+      });
+      return;
+    }
+
+    setIsTransferringPass(true);
+    
+    try {
+      // Get network-specific algod client
+      const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+      const algodClient = getAlgodClient(networkType);
+      
+      // Get suggested parameters
+      const suggestedParams = await algodClient.getTransactionParams().do();
+      
+      // Create transfer transaction
+      const transferTxn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+        sender: activeAddress,
+        receiver: recipientAddress,
+        amount: 1,
+        assetIndex: assetId,
+        suggestedParams,
+      });
+
+      const encodedTransferTxn = algosdk.encodeUnsignedTransaction(transferTxn);
+      const signedTransferTxns = await signTransactions([encodedTransferTxn]);
+      
+      if (signedTransferTxns && signedTransferTxns[0]) {
+        const signedTransferTxnBytes = signedTransferTxns.map(txn => txn ? new Uint8Array(txn) : null).filter(Boolean) as Uint8Array[];
+        await algodClient.sendRawTransaction(signedTransferTxnBytes).do();
+        
+        // Wait for confirmation
+        await algosdk.waitForConfirmation(
+          algodClient,
+          algosdk.decodeSignedTransaction(signedTransferTxnBytes[0]).txn.txID(),
+          4
+        );
+        
+        setNftPassResult({ 
+          success: true, 
+          message: `Loyalty Program Pass (Asset ID: ${assetId}) successfully transferred to ${recipientAddress}!`, 
+          assetId 
+        });
+        
+        // Clear the pending transfer
+        setPendingTransferAssetId(null);
+        
+        // Refresh members list after successful transfer
+        fetchLoyaltyProgramMembers();
+      } else {
+        throw new Error('Failed to sign transaction');
+      }
+    } catch (error: any) {
+      console.error('Error transferring loyalty pass:', error);
+      setNftPassResult({ 
+        success: false, 
+        message: `Error transferring loyalty pass: ${error.message || 'Unknown error'}` 
+      });
+    } finally {
+      setIsTransferringPass(false);
     }
   };
 
@@ -771,150 +946,21 @@ export function LoyaltyProgramDashboard() {
     );
   };
 
-  // Shareable Link Modal
-  const renderShareableLinkModal = () => {
-    if (!shareableLinkProgram || !showShareableLink) return null;
-
-    const shareableLink = generateShareableLink(shareableLinkProgram);
+  // Loyalty Program Pass Issuance Modal
+  const renderLoyaltyPassModal = () => {
+    if (!selectedMember || !showLoyaltyPassModal) return null;
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Share2 size={24} />
-              Share Registration Link
-            </h2>
-            <button
-              onClick={closeShareableLink}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <X size={24} />
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="p-6 space-y-6">
-            {/* Program Information */}
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Award size={18} />
-                Program Information
-              </h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Program Name</p>
-                  <p className="font-medium">{shareableLinkProgram.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Company</p>
-                  <p className="font-medium">{shareableLinkProgram.metadata?.co || shareableLinkProgram.metadata?.company || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Asset ID</p>
-                  <p className="font-medium">{shareableLinkProgram.id}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Network</p>
-                  <p className="font-medium">{activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Shareable Link */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Shareable Registration Link
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={shareableLink}
-                  readOnly
-                  className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(shareableLink);
-                    alert('Link copied to clipboard!');
-                  }}
-                  className="px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-                >
-                  <Link size={16} />
-                  Copy
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Share this link with potential members to allow them to register for your loyalty program
-              </p>
-            </div>
-
-            {/* QR Code for Link */}
-            <div className="text-center">
-              <h3 className="font-semibold mb-3">QR Code for Registration Link</h3>
-              <div className="bg-white p-4 rounded-lg inline-block shadow-sm">
-                <div className="w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <p className="text-gray-500 text-sm">QR Code would be generated here</p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Members can scan this QR code to access the registration form
-              </p>
-            </div>
-
-            {/* Instructions */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">How to Use</h3>
-              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li>1. Copy the registration link above</li>
-                <li>2. Share it via email, social media, or any communication channel</li>
-                <li>3. Members will fill out their details and verify their phone number</li>
-                <li>4. Verified members will appear in your Members tab</li>
-                <li>5. You can issue NFT loyalty passes to verified members</li>
-              </ul>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={closeShareableLink}
-                className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  // Open in new tab for testing
-                  window.open(shareableLink, '_blank');
-                }}
-                className="flex-1 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
-              >
-                <Eye size={16} />
-                Preview Form
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // NFT Pass Issuance Modal
-  const renderNFTPassModal = () => {
-    if (!selectedMember || !showNFTPassModal) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative nft-pass-modal">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <CreditCard size={24} />
-              Issue NFT Loyalty Pass
+              Issue Loyalty Program Pass
             </h2>
             <button
-              onClick={closeNFTPassModal}
+              onClick={closeLoyaltyPassModal}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <X size={24} />
@@ -930,27 +976,80 @@ export function LoyaltyProgramDashboard() {
                 Member Information
               </h3>
               <div className="flex items-center gap-4">
-                <img
-                  src={selectedMember.avatar || `https://ui-avatars.com/api/?name=${selectedMember.name}&background=random`}
-                  alt={selectedMember.name}
-                  className="w-12 h-12 rounded-full"
-                />
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{selectedMember.name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedMember.email}</p>
-                  <p className="text-sm">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      selectedMember.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
-                      selectedMember.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
-                      selectedMember.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
-                      'bg-orange-100 text-orange-800'
-                    }`}>
-                      {selectedMember.currentTier}
-                    </span>
-                    <span className="ml-2 text-gray-600 dark:text-gray-300">
-                      {selectedMember.totalPoints.toLocaleString()} points
-                    </span>
-                  </p>
+                <div className="flex-1">
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Wallet Address</p>
+                    <p className="font-medium text-gray-900 dark:text-white font-mono flex items-center">
+                      {selectedMember.address}
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedMember.address);
+                          // Show a temporary notification
+                          const notification = document.createElement('div');
+                          notification.textContent = 'Address copied!';
+                          notification.className = 'absolute top-2 right-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded animate-fade-in-out';
+                          document.querySelector('.nft-pass-modal')?.appendChild(notification);
+                          setTimeout(() => notification.remove(), 2000);
+                        }}
+                        className="ml-2 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                        title="Copy wallet address"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      </button>
+                    </p>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Loyalty Passes</p>
+                    <div className="mt-1">
+                      {selectedMember.assetIds.length > 0 ? (
+                        selectedMember.assetIds.map((assetId) => (
+                          <div key={assetId} className="mb-1 last:mb-0">
+                            <a 
+                              href={`${EXPLORER_URL}/asset/${assetId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                            >
+                              Pass #{assetId}
+                            </a>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No passes yet</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Date Joined</p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {new Date(selectedMember.joinDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Points</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {selectedMember.totalPoints.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Tier</p>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        selectedMember.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
+                        selectedMember.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
+                        selectedMember.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {selectedMember.currentTier}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -986,33 +1085,90 @@ export function LoyaltyProgramDashboard() {
                 className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
               <p className="text-xs text-gray-500 mt-1">
-                If left empty, the NFT pass will be minted to your wallet. You can transfer it later.
+                If left empty, the Loyalty Program Pass will be minted to your wallet. You can transfer it later.
               </p>
             </div>
 
             {/* Pass Preview */}
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-              <h3 className="font-semibold mb-3">NFT Pass Preview</h3>
-              <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h4 className="font-bold text-lg">
-                      {userLoyaltyPrograms.find(p => p.id === selectedProgramId)?.name || 'Loyalty Program'}
-                    </h4>
-                    <p className="text-blue-100 text-sm">
-                      {userLoyaltyPrograms.find(p => p.id === selectedProgramId)?.metadata?.co || 'Company'}
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Users size={18} />
+                Member Information
+              </h3>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Wallet Address</p>
+                    <p className="font-medium text-gray-900 dark:text-white font-mono flex items-center">
+                      {selectedMember.address}
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedMember.address);
+                          // Show a temporary notification
+                          const notification = document.createElement('div');
+                          notification.textContent = 'Address copied!';
+                          notification.className = 'absolute top-2 right-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded animate-fade-in-out';
+                          document.querySelector('.nft-pass-modal')?.appendChild(notification);
+                          setTimeout(() => notification.remove(), 2000);
+                        }}
+                        className="ml-2 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                        title="Copy wallet address"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      </button>
                     </p>
                   </div>
-                  <CreditCard size={24} className="text-blue-200" />
-                </div>
-                <div className="flex justify-between items-end">
-                  <div>
-                    <p className="text-blue-100 text-xs">MEMBER</p>
-                    <p className="font-medium">{selectedMember.name}</p>
+                  
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Loyalty Passes</p>
+                    <div className="mt-1">
+                      {selectedMember.assetIds.length > 0 ? (
+                        selectedMember.assetIds.map((assetId) => (
+                          <div key={assetId} className="mb-1 last:mb-0">
+                            <a 
+                              href={`${EXPLORER_URL}/asset/${assetId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                            >
+                              Pass #{assetId}
+                            </a>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No passes yet</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-blue-100 text-xs">TIER</p>
-                    <p className="font-bold text-yellow-300">{selectedMember.currentTier}</p>
+                  
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Date Joined</p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {new Date(selectedMember.joinDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Points</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {selectedMember.totalPoints.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Tier</p>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        selectedMember.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
+                        selectedMember.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
+                        selectedMember.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {selectedMember.currentTier}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1023,16 +1179,44 @@ export function LoyaltyProgramDashboard() {
               <div className={`p-4 rounded-lg ${nftPassResult.success ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'}`}>
                 <p>{nftPassResult.message}</p>
                 {nftPassResult.assetId && (
-                  <p className="mt-2">
+                  <div className="mt-2">
                     <a 
                       href={`${EXPLORER_URL}/asset/${nftPassResult.assetId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline"
                     >
-                      View NFT Pass on Explorer
+                      View Loyalty Program Pass on Explorer
                     </a>
-                  </p>
+                    
+                    {/* Show transfer button if there's a pending transfer asset ID */}
+                    {pendingTransferAssetId && recipientAddress && (
+                      <div className="mt-4 p-4 border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                        <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Transfer Failed</h4>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                          The Loyalty Program Pass was created successfully but couldn't be transferred automatically. 
+                          Click the button below to try transferring it again.
+                        </p>
+                        <button
+                          onClick={() => transferLoyaltyPass(pendingTransferAssetId, recipientAddress)}
+                          disabled={isTransferringPass}
+                          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isTransferringPass ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              <span>Transferring...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send size={16} />
+                              <span>Transfer Loyalty Program Pass to {recipientAddress.substring(0, 8)}...{recipientAddress.substring(recipientAddress.length - 4)}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1040,17 +1224,17 @@ export function LoyaltyProgramDashboard() {
             {/* Action Buttons */}
             <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
               <button
-                onClick={closeNFTPassModal}
+                onClick={closeLoyaltyPassModal}
                 className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={() => issueNFTPass(recipientAddress)}
-                disabled={issuingNFTPass || userLoyaltyPrograms.length === 0}
+                onClick={() => issueLoyaltyPass(recipientAddress)}
+                disabled={issuingLoyaltyPass || userLoyaltyPrograms.length === 0}
                 className="flex-1 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {issuingNFTPass ? (
+                {issuingLoyaltyPass ? (
                   <>
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                     Issuing Pass...
@@ -1058,7 +1242,7 @@ export function LoyaltyProgramDashboard() {
                 ) : (
                   <>
                     <Send size={16} />
-                    Issue NFT Pass
+                    Issue Loyalty Pass
                   </>
                 )}
               </button>
@@ -1233,25 +1417,31 @@ export function LoyaltyProgramDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Programs */}
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold">Recent Programs</h3>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={fetchUserLoyaltyPrograms}
-                  disabled={isLoading}
-                  className="text-gray-500 hover:text-gray-700 text-sm font-medium disabled:opacity-50"
-                  title="Refresh programs"
-                >
-                  {isLoading ? '🔄' : '↻'}
-                </button>
-                <button 
-                  onClick={() => setActiveTab('programs')}
-                  className="text-blue-500 hover:text-blue-700 text-sm font-medium"
-                >
-                  View All
-                </button>
-              </div>
+                      <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold">Recent Programs</h3>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={fetchUserLoyaltyPrograms}
+                disabled={isLoading}
+                className="text-gray-500 hover:text-gray-700 text-sm font-medium disabled:opacity-50"
+                title="Refresh programs"
+              >
+                {isLoading ? '🔄' : '↻'}
+              </button>
+              <button 
+                onClick={() => setActiveTab('transfer')}
+                className="text-green-500 hover:text-green-700 text-sm font-medium"
+              >
+                Transfer Pass
+              </button>
+              <button 
+                onClick={() => setActiveTab('programs')}
+                className="text-blue-500 hover:text-blue-700 text-sm font-medium"
+              >
+                View All
+              </button>
             </div>
+          </div>
             
             {isLoading ? (
               <div className="text-center py-8">
@@ -1480,39 +1670,26 @@ export function LoyaltyProgramDashboard() {
                   </div>
                 )}
                 
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <a
-                      href={`${EXPLORER_URL}/asset/${program.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-blue-500 hover:underline text-sm"
-                    >
-                      View on Lora Explorer
-                    </a>
-                    
-                    <a
-                      href={program.imageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-blue-500 hover:underline text-sm"
-                    >
-                      View Media
-                    </a>
-                  </div>
-                  
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleShareableLink(program);
-                    }}
-                    className="w-full px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-sm"
+                <div className="flex justify-between">
+                  <a
+                    href={`${EXPLORER_URL}/asset/${program.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-blue-500 hover:underline text-sm"
                   >
-                    <Share2 size={14} />
-                    Share Registration Link
-                  </button>
+                    View on Lora Explorer
+                  </a>
+                  
+                  <a
+                    href={program.imageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-blue-500 hover:underline text-sm"
+                  >
+                    View Media
+                  </a>
                 </div>
               </div>
             </div>
@@ -1538,10 +1715,10 @@ export function LoyaltyProgramDashboard() {
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <CreditCard className="h-5 w-5 text-blue-600" />
-            <h4 className="font-medium text-blue-900 dark:text-blue-100">NFT Loyalty Passes</h4>
+            <h4 className="font-medium text-blue-900 dark:text-blue-100">Loyalty Program Passes</h4>
           </div>
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            Issue unique NFT loyalty passes to your members! Each pass contains member information, tier status, 
+            Issue unique loyalty program passes to your members! Each pass contains member information, tier status, 
             and program details stored on the Algorand blockchain. Members can use these passes to prove their 
             loyalty status and access exclusive benefits.
           </p>
@@ -1552,262 +1729,325 @@ export function LoyaltyProgramDashboard() {
         <h3 className="text-xl font-semibold">Program Members</h3>
         <div className="flex gap-2">
           <button 
-            onClick={() => {
-              if (userLoyaltyPrograms.length === 0) {
-                alert('Please create a loyalty program first before issuing NFT passes.');
-                return;
-              }
-              alert('Bulk NFT Pass issuance coming soon! For now, use the individual "Issue Pass" buttons.');
-            }}
-            className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
-            title="Issue NFT passes to all members"
+            onClick={() => fetchLoyaltyProgramMembers()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            disabled={isMembersLoading}
           >
-            <Wallet size={16} />
-            Bulk Issue Passes
+            {isMembersLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <Users size={16} />
+                <span>Refresh Members</span>
+              </>
+            )}
           </button>
-          <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-            Export Members
-          </button>
-          <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
-            Add Member
+          <button 
+            onClick={() => setActiveTab('transfer')}
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+          >
+            <Send size={16} />
+            Transfer Pass
           </button>
         </div>
       </div>
       
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Member
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Points
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Tier
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Join Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-              {members.map((member) => (
-                <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <img
-                        src={member.avatar || `https://ui-avatars.com/api/?name=${member.name}&background=random`}
-                        alt={member.name}
-                        className="w-10 h-10 rounded-full mr-3"
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {member.name}
-                        </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {member.email}
+      {isMembersLoading && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600 mr-2"></div>
+          <p className="text-blue-700 dark:text-blue-300">Fetching members from the Algorand blockchain...</p>
+        </div>
+      )}
+      
+      {membersError && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-red-700 dark:text-red-300 font-medium">Error loading members: {membersError}</p>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-1">Please try again or check your network connection.</p>
+        </div>
+      )}
+      
+      {!isMembersLoading && !membersError && members.length === 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
+          <Users className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+          <p className="text-yellow-700 dark:text-yellow-300 font-medium">No members found</p>
+          <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+            No wallet addresses have received loyalty passes from your programs yet.
+          </p>
+        </div>
+      )}
+      
+      {!isMembersLoading && !membersError && members.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Wallet Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Loyalty Pass
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Date Received
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Points
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {members.map((member) => (
+                  <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white font-mono">
+                          {member.address.substring(0, 12)}...{member.address.substring(member.address.length - 8)}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(member.address);
+                              // Show a temporary tooltip or notification
+                              const target = e.currentTarget;
+                              const originalText = target.innerHTML;
+                              target.innerHTML = '✓';
+                              target.classList.add('text-green-500');
+                              setTimeout(() => {
+                                target.innerHTML = originalText;
+                                target.classList.remove('text-green-500');
+                              }, 1000);
+                            }}
+                            className="ml-2 inline-flex items-center hover:text-blue-500 transition-colors"
+                            title="Copy wallet address"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">
-                      {member.totalPoints.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      member.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
-                      member.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
-                      member.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
-                      'bg-orange-100 text-orange-800'
-                    }`}>
-                      {member.currentTier}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {new Date(member.joinDate).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => handleIssueNFTPass(member)}
-                        className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-xs"
-                        title="Issue NFT Loyalty Pass"
-                      >
-                        <CreditCard size={12} />
-                        Issue Pass
-                      </button>
-                      <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                      <button className="text-red-600 hover:text-red-900">Remove</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderAddMember = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h3 className="text-xl font-semibold mb-4">Add New Member</h3>
-        {userLoyaltyPrograms.length === 0 ? (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
-            <p className="text-yellow-800 dark:text-yellow-200">
-              You need to create at least one loyalty program before adding members.
-            </p>
-            <button
-              onClick={() => setActiveTab('create')}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Create Loyalty Program
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Manual Member Registration
-              </h4>
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                Use this form to manually register members for your loyalty programs. 
-                Members will receive an OTP verification to confirm their phone number.
-              </p>
-            </div>
-            
-            {/* Program Selection */}
-            <div className="max-w-md mx-auto">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Select Loyalty Program
-              </label>
-              <select
-                value={selectedProgramId}
-                onChange={(e) => setSelectedProgramId(Number(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value={0}>Choose a program...</option>
-                {userLoyaltyPrograms.map((program) => (
-                  <option key={program.id} value={program.id}>
-                    {program.name} (ID: {program.id})
-                  </option>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        {member.assetIds.map((assetId, index) => (
+                          <div key={assetId} className="mb-1 last:mb-0">
+                            <a 
+                              href={`${EXPLORER_URL}/asset/${assetId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Pass #{assetId}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(member.joinDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {member.totalPoints.toLocaleString()}
+                      </div>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        member.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
+                        member.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
+                        member.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {member.currentTier}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleIssueLoyaltyPass(member)}
+                          className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-xs"
+                          title="Issue Loyalty Program Pass"
+                        >
+                          <CreditCard size={12} />
+                          Issue Pass
+                        </button>
+                        <a 
+                          href={`${EXPLORER_URL}/address/${member.address}`} 
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          View
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-              </select>
-            </div>
-            
-            {selectedProgramId > 0 && (
-              <div className="max-w-2xl mx-auto">
-                <MemberRegistrationForm
-                  loyaltyProgramId={selectedProgramId.toString()}
-                  onSuccess={handleMemberRegistrationSuccess}
-                  onCancel={() => setSelectedProgramId(0)}
-                />
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 
   const renderLeaderboard = () => (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-xl font-semibold">Member Leaderboard</h3>
-        <select className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
-          <option>This Month</option>
-          <option>Last Month</option>
-          <option>All Time</option>
-        </select>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {leaderboard.slice(0, 3).map((entry) => (
-          <div key={entry.member.id} className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 text-center">
-            <div className="text-4xl mb-2">{entry.badge}</div>
-            <img
-              src={entry.member.avatar || `https://ui-avatars.com/api/?name=${entry.member.name}&background=random`}
-              alt={entry.member.name}
-              className="w-16 h-16 rounded-full mx-auto mb-3"
-            />
-            <h4 className="font-semibold text-lg">{entry.member.name}</h4>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">{entry.member.currentTier}</p>
-            <p className="text-2xl font-bold text-blue-600 mt-2">{entry.points.toLocaleString()}</p>
-            <p className="text-xs text-gray-400">points</p>
-          </div>
-        ))}
-      </div>
-      
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Rank
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Member
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Points
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Tier
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-              {leaderboard.map((entry) => (
-                <tr key={entry.member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <span className="text-lg font-bold mr-2">#{entry.rank}</span>
-                      {entry.badge && <span className="text-xl">{entry.badge}</span>}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <img
-                        src={entry.member.avatar || `https://ui-avatars.com/api/?name=${entry.member.name}&background=random`}
-                        alt={entry.member.name}
-                        className="w-8 h-8 rounded-full mr-3"
-                      />
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {entry.member.name}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-bold text-blue-600">
-                      {entry.points.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      entry.member.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
-                      entry.member.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
-                      entry.member.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
-                      'bg-orange-100 text-orange-800'
-                    }`}>
-                      {entry.member.currentTier}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <h3 className="text-xl font-semibold">Leaderboard</h3>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setActiveTab('members')}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            disabled={isMembersLoading}
+          >
+            {isMembersLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <Users size={16} />
+                <span>Refresh Leaderboard</span>
+              </>
+            )}
+          </button>
+          <button 
+            onClick={() => setActiveTab('create')}
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Create New Program
+          </button>
         </div>
       </div>
+      
+      {isMembersLoading && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600 mr-2"></div>
+          <p className="text-blue-700 dark:text-blue-300">Fetching members from the Algorand blockchain...</p>
+        </div>
+      )}
+      
+      {membersError && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-red-700 dark:text-red-300 font-medium">Error loading members: {membersError}</p>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-1">Please try again or check your network connection.</p>
+        </div>
+      )}
+      
+      {!isMembersLoading && !membersError && members.length === 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
+          <Users className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+          <p className="text-yellow-700 dark:text-yellow-300 font-medium">No members found</p>
+          <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+            No wallet addresses have received loyalty passes from your programs yet.
+          </p>
+        </div>
+      )}
+      
+      {!isMembersLoading && !membersError && members.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Rank
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Wallet Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Loyalty Passes
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Points
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {leaderboard.map((entry) => (
+                  <tr key={entry.member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <span className="text-lg font-bold mr-2">#{entry.rank}</span>
+                        {entry.badge && <span className="text-xl">{entry.badge}</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white font-mono">
+                          {entry.member.address.substring(0, 12)}...{entry.member.address.substring(entry.member.address.length - 8)}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(entry.member.address);
+                              // Show a temporary tooltip or notification
+                              const target = e.currentTarget;
+                              const originalText = target.innerHTML;
+                              target.innerHTML = '✓';
+                              target.classList.add('text-green-500');
+                              setTimeout(() => {
+                                target.innerHTML = originalText;
+                                target.classList.remove('text-green-500');
+                              }, 1000);
+                            }}
+                            className="ml-2 inline-flex items-center hover:text-blue-500 transition-colors"
+                            title="Copy wallet address"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        {entry.member.assetIds.map((assetId, index) => (
+                          <div key={assetId} className="mb-1 last:mb-0">
+                            <a 
+                              href={`${EXPLORER_URL}/asset/${assetId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Pass #{assetId}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-bold text-blue-600">
+                        {entry.points.toLocaleString()}
+                      </div>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        entry.member.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
+                        entry.member.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
+                        entry.member.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {entry.member.currentTier}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1868,10 +2108,14 @@ export function LoyaltyProgramDashboard() {
                   ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                   : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
               }`}
-              onClick={() => setActiveTab('members')}
+              onClick={() => {
+                setActiveTab('members');
+                fetchLoyaltyProgramMembers(); // Fetch members when tab is clicked
+              }}
             >
               <Users size={20} />
               Members
+              {isMembersLoading && <span className="ml-2 animate-pulse text-xs bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded-full">Loading...</span>}
             </button>
             <button
               className={`py-3 px-6 font-medium text-lg whitespace-nowrap flex items-center gap-2 ${
@@ -1886,14 +2130,14 @@ export function LoyaltyProgramDashboard() {
             </button>
             <button
               className={`py-3 px-6 font-medium text-lg whitespace-nowrap flex items-center gap-2 ${
-                activeTab === 'add-member'
+                activeTab === 'transfer'
                   ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                   : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
               }`}
-              onClick={() => setActiveTab('add-member')}
+              onClick={() => setActiveTab('transfer')}
             >
-              <UserPlus size={20} />
-              Add Member
+              <Send size={20} />
+              Transfer Pass
             </button>
           </div>
 
@@ -1902,9 +2146,27 @@ export function LoyaltyProgramDashboard() {
           {activeTab === 'programs' && renderPrograms()}
           {activeTab === 'members' && renderMembers()}
           {activeTab === 'leaderboard' && renderLeaderboard()}
-          {activeTab === 'add-member' && renderAddMember()}
           {activeTab === 'create' && (
             <LoyaltyProgramMinter onLoyaltyProgramMinted={handleLoyaltyProgramMinted} />
+          )}
+          {activeTab === 'transfer' && (
+            <LoyaltyPassTransfer 
+              onPassTransferred={(assetId, recipient) => {
+                // Add a new activity for the transfer
+                const newActivity = {
+                  id: `transfer-${assetId}-${Date.now()}`,
+                  type: 'pass_transferred',
+                  message: `Loyalty pass (Asset ID: ${assetId}) was transferred to ${recipient.substring(0, 8)}...`,
+                  timestamp: new Date().toISOString(),
+                  color: 'blue'
+                };
+                
+                setRecentActivities(prev => [newActivity, ...prev].slice(0, 5));
+                
+                // Optionally refresh programs
+                fetchUserLoyaltyPrograms();
+              }} 
+            />
           )}
         </>
       )}
@@ -1912,11 +2174,8 @@ export function LoyaltyProgramDashboard() {
       {/* Program Details Modal */}
       {renderProgramDetailsModal()}
       
-      {/* Shareable Link Modal */}
-      {renderShareableLinkModal()}
-      
-      {/* NFT Pass Modal */}
-      {renderNFTPassModal()}
+      {/* Loyalty Program Pass Modal */}
+      {renderLoyaltyPassModal()}
     </div>
   );
 } 

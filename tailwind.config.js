@@ -9,6 +9,7 @@ export default {
     extend: {
       animation: {
         blob: 'blob 7s infinite',
+        'fade-in-out': 'fadeInOut 2s ease-in-out',
       },
       keyframes: {
         blob: {
@@ -24,6 +25,12 @@ export default {
           '100%': {
             transform: 'translate(0px, 0px) scale(1)',
           },
+        },
+        fadeInOut: {
+          '0%': { opacity: 0 },
+          '10%': { opacity: 1 },
+          '90%': { opacity: 1 },
+          '100%': { opacity: 0 },
         },
       },
     },
