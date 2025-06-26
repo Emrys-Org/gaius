@@ -11,8 +11,12 @@ import { WalletInfo } from './components/WalletInfo'
 import { TextWithCopy } from './components/TextWithCopy'
 import { LoyaltyProgramDashboard } from './components/LoyaltyProgramDashboard'
 import { LoyaltyProgramMinter } from './components/LoyaltyProgramMinter'
+import { LoyaltyPassSender } from './components/LoyaltyPassSender'
 import { HomePage } from './components/HomePage'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import algosdk from 'algosdk'
+import { getAlgodClient } from './utils/algod'
+import { getIPFSGatewayURL } from './utils/pinata'
 
 const walletManager = new WalletManager({
   wallets: [
@@ -31,11 +35,81 @@ const walletManager = new WalletManager({
 function AppContent() {
   const { activeAddress, activeWallet } = useWallet();
   const { activeNetwork, setActiveNetwork } = useNetwork();
-  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass'>('home');
+  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
+
+  // Fetch user loyalty programs
+  const fetchUserLoyaltyPrograms = async () => {
+    if (!activeAddress) return;
+    
+    try {
+      const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+      const algodClient = getAlgodClient(networkType);
+      
+      const accountInfo = await algodClient.accountInformation(activeAddress).do();
+      const assets = accountInfo.assets || [];
+      
+      const programsInfo: any[] = [];
+      
+      for (const asset of assets) {
+        if (typeof asset.amount === 'bigint' ? asset.amount === 0n : asset.amount === 0) continue;
+        
+        try {
+          const assetInfo = await algodClient.getAssetByID(asset.assetId).do();
+          const params = assetInfo.params;
+          
+          const totalSupply = typeof params.total === 'bigint' ? Number(params.total) : Number(params.total);
+          const isLoyaltyProgram = totalSupply === 1 && params.decimals === 0;
+          
+          if (isLoyaltyProgram) {
+            let url = params.url || '';
+            let imageUrl = url;
+            let metadata = null;
+            
+            if (url && (url.startsWith('ipfs://') || url.includes('/ipfs/'))) {
+              imageUrl = getIPFSGatewayURL(url);
+              
+              try {
+                const response = await fetch(imageUrl);
+                if (response.ok) {
+                  metadata = await response.json();
+                  if (metadata.image) {
+                    imageUrl = getIPFSGatewayURL(metadata.image);
+                  }
+                }
+              } catch (e) {
+                console.warn(`Failed to fetch metadata for asset ${asset.assetId}`, e);
+              }
+            }
+            
+            programsInfo.push({
+              id: typeof asset.assetId === 'bigint' ? Number(asset.assetId) : asset.assetId,
+              name: params.name || 'Unnamed Loyalty Program',
+              imageUrl,
+              metadata
+            });
+          }
+        } catch (error) {
+          console.error(`Error fetching asset ${asset.assetId} info:`, error);
+        }
+      }
+      
+      setUserLoyaltyPrograms(programsInfo);
+    } catch (error) {
+      console.error('Error fetching loyalty programs:', error);
+    }
+  };
+
+  // Fetch loyalty programs when user navigates to send-pass page
+  useEffect(() => {
+    if (activeAddress && currentPage === 'send-pass') {
+      fetchUserLoyaltyPrograms();
+    }
+  }, [activeAddress, currentPage, activeNetwork]);
 
   // Redirect to home if trying to access dashboard without wallet
-  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program') => {
-    if ((page === 'loyalty-dashboard' || page === 'create-program') && !activeAddress) {
+  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass') => {
+    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !activeAddress) {
       // Don't navigate to dashboard or create program without wallet connection
       return;
     }
@@ -95,6 +169,21 @@ function AppContent() {
                   Organization Dashboard
                   {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
                 </button>
+                <button 
+                  onClick={() => handleNavigation('send-pass')} 
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    !activeAddress 
+                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50' 
+                      : currentPage === 'send-pass' 
+                        ? 'text-blue-600 dark:text-blue-400' 
+                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'
+                  }`}
+                  disabled={!activeAddress}
+                  title={!activeAddress ? 'Connect your wallet to send loyalty passes' : ''}
+                >
+                  Send Pass
+                  {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
+                </button>
               </nav>
             </div>
             <div className="flex items-center gap-4">
@@ -144,9 +233,30 @@ function AppContent() {
                       }`}>
                         {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
                       </span>
-                    </div>
-                  </div>
+                </div>
+                </div>
                   <LoyaltyProgramMinter onLoyaltyProgramMinted={() => handleNavigation('loyalty-dashboard')} />
+                </div>
+              </div>
+            ) : currentPage === 'send-pass' ? (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                <div className="mb-6">
+                  <button
+                    onClick={() => handleNavigation('home')}
+                    className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  >
+                    ← Back to Home
+                  </button>
+                </div>
+                <WalletInfo />
+                <div className="mt-8">
+                  <LoyaltyPassSender 
+                    loyaltyPrograms={userLoyaltyPrograms}
+                    onPassSent={(assetId) => {
+                      console.log('Pass sent with asset ID:', assetId);
+                      // You can add additional logic here, like refreshing the dashboard
+                    }}
+                  />
                 </div>
               </div>
             ) : (
