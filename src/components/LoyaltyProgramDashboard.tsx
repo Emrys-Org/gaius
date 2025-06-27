@@ -3,10 +3,14 @@ import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import algosdk from 'algosdk';
 import { LoyaltyProgramMinter } from './LoyaltyProgramMinter';
 import { LoyaltyPassTransfer } from './LoyaltyPassTransfer';
+import { XPManager } from './XPManager';
 import { getAlgodClient, getNetworkConfig } from '../utils/algod';
 import { getIPFSGatewayURL } from '../utils/pinata';
 import * as QRCode from 'qrcode';
-import { QrCode, Download, BarChart3, Users, Trophy, Settings, Eye, Plus, TrendingUp, Award, Star, X, Calendar, MapPin, Palette, CreditCard, Send, Wallet, ExternalLink, ArrowRight } from 'lucide-react';
+import { QrCode, Download, BarChart3, Users, Trophy, Settings, Eye, Plus, TrendingUp, Award, Star, X, Calendar, MapPin, Palette, CreditCard, Send, Wallet, ExternalLink, ArrowRight, MessageSquare } from 'lucide-react';
+import { XPTransaction, fetchMemberXPTransactions } from '../utils/xp';
+import { MessageCenter } from './MessageCenter';
+import { MemberCard } from './MemberCard';
 
 interface LoyaltyProgramInfo {
   id: number;
@@ -31,6 +35,8 @@ interface Member {
   currentTier: string;
   avatar?: string;
   assetIds: number[]; // IDs of loyalty passes owned
+  xpHistory?: XPTransaction[];
+  hasUnreadMessages?: boolean;
 }
 
 interface LeaderboardEntry {
@@ -38,6 +44,12 @@ interface LeaderboardEntry {
   member: Member;
   points: number;
   badge?: string;
+}
+
+interface TierChange {
+  from: string;
+  to: string;
+  timestamp: number;
 }
 
 // Helper to determine media type from metadata or URL
@@ -80,13 +92,40 @@ const getMediaType = (program: LoyaltyProgramInfo): 'image' | 'video' | 'audio' 
   return 'image';
 };
 
+// Helper to determine tier based on points
+const determineTier = (points: number, tiers: any[]): string => {
+  if (!tiers || tiers.length === 0) {
+    // Default tiers if none provided
+    const defaultTiers = [
+      { name: 'Bronze', pointsRequired: 0 },
+      { name: 'Silver', pointsRequired: 500 },
+      { name: 'Gold', pointsRequired: 1000 },
+      { name: 'Platinum', pointsRequired: 2500 }
+    ];
+    tiers = defaultTiers;
+  }
+
+  // Sort tiers by points required (ascending)
+  const sortedTiers = [...tiers].sort((a, b) => a.pointsRequired - b.pointsRequired);
+  
+  // Find the highest tier the member qualifies for (starting from highest tier)
+  for (let i = sortedTiers.length - 1; i >= 0; i--) {
+    if (points >= sortedTiers[i].pointsRequired) {
+      return sortedTiers[i].name;
+    }
+  }
+  
+  // Default to the lowest tier if no match
+  return sortedTiers[0]?.name || 'Bronze';
+};
+
 export function LoyaltyProgramDashboard() {
   const { activeAddress, signTransactions } = useWallet();
   const { activeNetwork } = useNetwork();
   const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<LoyaltyProgramInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isMembersLoading, setIsMembersLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'create' | 'transfer'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'create' | 'transfer' | 'xp-manager'>('overview');
   const [error, setError] = useState<string | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
@@ -100,6 +139,8 @@ export function LoyaltyProgramDashboard() {
   const [selectedProgramId, setSelectedProgramId] = useState(0);
   const [isTransferringPass, setIsTransferringPass] = useState(false);
   const [pendingTransferAssetId, setPendingTransferAssetId] = useState<number | null>(null);
+  const [showMessageCenter, setShowMessageCenter] = useState(false);
+  const [selectedMemberForMessage, setSelectedMemberForMessage] = useState<Member | null>(null);
   
   // Real members data from blockchain
   const [members, setMembers] = useState<Member[]>([]);
@@ -377,8 +418,6 @@ export function LoyaltyProgramDashboard() {
                     // Try to fetch metadata from the asset to get member details
                     let memberName = "Unknown Member";
                     let memberEmail = "";
-                    let memberTier = "Bronze";
-                    let memberPoints = 0;
                     let joinDate = new Date().toISOString();
                     
                     // Try to get metadata from the asset URL
@@ -394,8 +433,6 @@ export function LoyaltyProgramDashboard() {
                           if (metadata.member) {
                             memberName = metadata.member.name || memberName;
                             memberEmail = metadata.member.email || memberEmail;
-                            memberTier = metadata.member.tier || memberTier;
-                            memberPoints = metadata.member.points || memberPoints;
                             joinDate = metadata.member.joinDate || metadata.issuedAt || joinDate;
                           }
                         }
@@ -404,15 +441,15 @@ export function LoyaltyProgramDashboard() {
                       }
                     }
                     
-                    // Create new member entry
+                    // Create new member entry (without XP data for now)
                     memberInfo = {
                       id: holderAddress.substring(0, 8),
                       address: holderAddress,
                       name: memberName,
                       email: memberEmail,
                       joinDate: joinDate,
-                      totalPoints: memberPoints,
-                      currentTier: memberTier,
+                      totalPoints: 0, // Will be updated with blockchain data
+                      currentTier: 'Bronze', // Will be updated with blockchain data
                       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=random`,
                       assetIds: [typeof asset.index === 'bigint' ? Number(asset.index) : asset.index]
                     };
@@ -433,15 +470,20 @@ export function LoyaltyProgramDashboard() {
       // Convert map to array
       const membersArray = Array.from(membersMap.values());
       
+      // Update XP data for each member from blockchain
+      const updatedMembersArray = await Promise.all(
+        membersArray.map(member => updateMemberXPData(member))
+      );
+      
       // Update members state
-      setMembers(membersArray);
+      setMembers(updatedMembersArray);
       
       // Add activity for new members
-      if (membersArray.length > 0) {
+      if (updatedMembersArray.length > 0) {
         const newActivity = {
           id: `members-${Date.now()}`,
           type: 'members_fetched',
-          message: `Found ${membersArray.length} members with loyalty passes`,
+          message: `Found ${updatedMembersArray.length} members with loyalty passes`,
           timestamp: new Date().toISOString(),
           color: 'green'
         };
@@ -519,9 +561,37 @@ export function LoyaltyProgramDashboard() {
       // Select the chosen loyalty program for the pass
       const loyaltyProgram = userLoyaltyPrograms.find(p => p.id === selectedProgramId) || userLoyaltyPrograms[0];
       
+      // Get program tiers from metadata
+      const programTiers = loyaltyProgram.metadata?.tiers || [];
+      
+      // Default tiers if none in metadata
+      const defaultTiers = [
+        { id: '1', name: 'Bronze', pointsRequired: 0, description: 'Basic rewards' },
+        { id: '2', name: 'Silver', pointsRequired: 500, description: 'Enhanced rewards' },
+        { id: '3', name: 'Gold', pointsRequired: 1000, description: 'Premium rewards' },
+        { id: '4', name: 'Platinum', pointsRequired: 2500, description: 'Elite rewards' }
+      ];
+      
+      const tiers = programTiers.length > 0 ? 
+        programTiers.map((t: any) => ({
+          id: t.id,
+          name: t.n || t.name,
+          pointsRequired: t.p || t.pointsRequired,
+          description: t.d || t.description
+        })) : 
+        defaultTiers;
+      
+      // Award initial XP for joining the program (if this is their first pass)
+      const initialXP = selectedMember.assetIds.length === 0 ? 50 : 0;
+      const newTotalPoints = selectedMember.totalPoints + initialXP;
+      
+      // Determine tier based on points (using the global determineTier function)
+      // Get the updated tier based on new points total
+      const updatedTier = determineTier(newTotalPoints, tiers);
+      
       // Create Loyalty Program Pass metadata
       const passMetadata = {
-        name: `${loyaltyProgram.name} - ${selectedMember.currentTier} Pass`,
+        name: `${loyaltyProgram.name} - ${updatedTier} Pass`,
         description: `Loyalty pass for ${selectedMember.name} in ${loyaltyProgram.name} program`,
         image: loyaltyProgram.imageUrl,
         type: 'loyalty-pass',
@@ -529,14 +599,19 @@ export function LoyaltyProgramDashboard() {
           id: selectedMember.id,
           name: selectedMember.name,
           email: selectedMember.email,
-          tier: selectedMember.currentTier,
-          points: selectedMember.totalPoints,
+          tier: updatedTier, // Use the updated tier
+          points: newTotalPoints, // Use the new points total
           joinDate: selectedMember.joinDate
         },
         program: {
           id: loyaltyProgram.id,
           name: loyaltyProgram.name,
           company: loyaltyProgram.metadata?.co || loyaltyProgram.metadata?.company
+        },
+        xp: {
+          initial: initialXP,
+          total: newTotalPoints,
+          lastUpdated: new Date().toISOString()
         },
         issuedBy: activeAddress,
         issuedAt: new Date().toISOString(),
@@ -588,6 +663,34 @@ export function LoyaltyProgramDashboard() {
         // Get the asset ID from the confirmed transaction
         const assetId = Number(confirmedTxn.assetIndex);
         
+        // Update the member with new XP and tier
+        const updatedMember: Member = {
+          ...selectedMember,
+          totalPoints: newTotalPoints,
+          currentTier: updatedTier,
+          assetIds: [...selectedMember.assetIds, assetId]
+        };
+        
+        // Update the members list
+        setMembers(prevMembers => 
+          prevMembers.map(member => 
+            member.id === updatedMember.id ? updatedMember : member
+          )
+        );
+        
+        // Add activity for XP update if initial XP was awarded
+        if (initialXP > 0) {
+          const xpActivity = {
+            id: `xp-initial-${Date.now()}`,
+            type: 'xp_awarded',
+            message: `${updatedMember.name || updatedMember.address.substring(0, 8)}... received ${initialXP} initial XP`,
+            timestamp: new Date().toISOString(),
+            color: 'green'
+          };
+          
+          setRecentActivities(prev => [xpActivity, ...prev].slice(0, 5));
+        }
+        
         // If recipient address is provided and different from sender, transfer the Loyalty Program Pass
         if (recipientAddress && recipientAddress !== activeAddress) {
           try {
@@ -607,9 +710,14 @@ export function LoyaltyProgramDashboard() {
               const signedTransferTxnBytes = signedTransferTxns.map(txn => txn ? new Uint8Array(txn) : null).filter(Boolean) as Uint8Array[];
               await algodClient.sendRawTransaction(signedTransferTxnBytes).do();
               
+              let successMessage = `Loyalty Program Pass (Asset ID: ${assetId}) successfully transferred to ${recipientAddress}!`;
+              if (initialXP > 0) {
+                successMessage += ` Member awarded ${initialXP} initial XP.`;
+              }
+              
               setNftPassResult({ 
                 success: true, 
-                message: `Loyalty Program Pass (Asset ID: ${assetId}) successfully transferred to ${recipientAddress}!`, 
+                message: successMessage, 
                 assetId 
               });
             }
@@ -623,9 +731,14 @@ export function LoyaltyProgramDashboard() {
             setPendingTransferAssetId(assetId);
           }
         } else {
+          let successMessage = `Loyalty Program Pass created successfully! Asset ID: ${assetId}`;
+          if (initialXP > 0) {
+            successMessage += ` Member awarded ${initialXP} initial XP.`;
+          }
+          
           setNftPassResult({ 
             success: true, 
-            message: `Loyalty Program Pass created successfully! Asset ID: ${assetId}`, 
+            message: successMessage, 
             assetId 
           });
         }
@@ -1708,192 +1821,77 @@ export function LoyaltyProgramDashboard() {
     </div>
   );
 
+  const renderMemberXPHistory = (member: Member) => {
+    if (!member.xpHistory || member.xpHistory.length === 0) {
+      return (
+        <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <p className="text-gray-600 dark:text-gray-400">No XP history found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {member.xpHistory.map((transaction) => (
+          <div 
+            key={transaction.txId}
+            className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  {transaction.amount > 0 ? '+' : ''}{transaction.amount} XP
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {transaction.reason}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {new Date(transaction.timestamp * 1000).toLocaleDateString()}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Total: {transaction.newTotal} XP
+                </p>
+              </div>
+            </div>
+            {transaction.tierChange && (
+              <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <TrendingUp size={14} />
+                  Tier Upgrade: {transaction.tierChange.from} → {transaction.tierChange.to}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderMembers = () => (
     <div className="space-y-6">
-      {/* NFT Pass Info */}
-      {userLoyaltyPrograms.length > 0 && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <CreditCard className="h-5 w-5 text-blue-600" />
-            <h4 className="font-medium text-blue-900 dark:text-blue-100">Loyalty Program Passes</h4>
-          </div>
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            Issue unique loyalty program passes to your members! Each pass contains member information, tier status, 
-            and program details stored on the Algorand blockchain. Members can use these passes to prove their 
-            loyalty status and access exclusive benefits.
-          </p>
-        </div>
-      )}
-      
       <div className="flex justify-between items-center">
-        <h3 className="text-xl font-semibold">Program Members</h3>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => fetchLoyaltyProgramMembers()}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-            disabled={isMembersLoading}
-          >
-            {isMembersLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                <span>Loading...</span>
-              </>
-            ) : (
-              <>
-                <Users size={16} />
-                <span>Refresh Members</span>
-              </>
-            )}
-          </button>
-          <button 
-            onClick={() => setActiveTab('transfer')}
-            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
-          >
-            <Send size={16} />
-            Transfer Pass
-          </button>
-        </div>
+        <h3 className="text-2xl font-bold flex items-center gap-2">
+          <Users size={24} className="text-blue-500" />
+          Members
+        </h3>
       </div>
-      
-      {isMembersLoading && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600 mr-2"></div>
-          <p className="text-blue-700 dark:text-blue-300">Fetching members from the Algorand blockchain...</p>
-        </div>
-      )}
-      
-      {membersError && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-red-700 dark:text-red-300 font-medium">Error loading members: {membersError}</p>
-          <p className="text-sm text-red-600 dark:text-red-400 mt-1">Please try again or check your network connection.</p>
-        </div>
-      )}
-      
-      {!isMembersLoading && !membersError && members.length === 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
-          <Users className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
-          <p className="text-yellow-700 dark:text-yellow-300 font-medium">No members found</p>
-          <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
-            No wallet addresses have received loyalty passes from your programs yet.
-          </p>
-        </div>
-      )}
-      
-      {!isMembersLoading && !membersError && members.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Wallet Address
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Loyalty Pass
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Date Received
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Points
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white font-mono">
-                          {member.address.substring(0, 12)}...{member.address.substring(member.address.length - 8)}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigator.clipboard.writeText(member.address);
-                              // Show a temporary tooltip or notification
-                              const target = e.currentTarget;
-                              const originalText = target.innerHTML;
-                              target.innerHTML = '✓';
-                              target.classList.add('text-green-500');
-                              setTimeout(() => {
-                                target.innerHTML = originalText;
-                                target.classList.remove('text-green-500');
-                              }, 1000);
-                            }}
-                            className="ml-2 inline-flex items-center hover:text-blue-500 transition-colors"
-                            title="Copy wallet address"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        {member.assetIds.map((assetId, index) => (
-                          <div key={assetId} className="mb-1 last:mb-0">
-                            <a 
-                              href={`${EXPLORER_URL}/asset/${assetId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              Pass #{assetId}
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(member.joinDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {member.totalPoints.toLocaleString()}
-                      </div>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        member.currentTier === 'Platinum' ? 'bg-purple-100 text-purple-800' :
-                        member.currentTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
-                        member.currentTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
-                        'bg-orange-100 text-orange-800'
-                      }`}>
-                        {member.currentTier}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => handleIssueLoyaltyPass(member)}
-                          className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-xs"
-                          title="Issue Loyalty Program Pass"
-                        >
-                          <CreditCard size={12} />
-                          Issue Pass
-                        </button>
-                        <a 
-                          href={`${EXPLORER_URL}/address/${member.address}`} 
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          View
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {members.map((member) => (
+          <MemberCard 
+            key={member.id}
+            member={member}
+            tiers={extractProgramTiers()}
+            onSendMessage={handleSendMessage}
+            onIssueLoyaltyPass={handleIssueLoyaltyPass}
+            onUpdateXP={() => setActiveTab('xp-manager')}
+            showActions={true}
+            showTierProgress={true}
+          />
+        ))}
+      </div>
     </div>
   );
 
@@ -2051,6 +2049,151 @@ export function LoyaltyProgramDashboard() {
     </div>
   );
 
+  // Handle XP update for a member
+  const handleXPUpdated = (updatedMember: Member) => {
+    // Update the member in the members list
+    setMembers(prevMembers => 
+      prevMembers.map(member => 
+        member.id === updatedMember.id ? updatedMember : member
+      )
+    );
+    
+    // Add activity for XP update
+    const newActivity = {
+      id: `xp-update-${Date.now()}`,
+      type: 'xp_updated',
+      message: `${updatedMember.name || updatedMember.address.substring(0, 8)}... received XP update`,
+      timestamp: new Date().toISOString(),
+      color: 'green'
+    };
+    
+    setRecentActivities(prev => [newActivity, ...prev].slice(0, 5));
+  };
+
+  // Extract tiers from all programs
+  const extractProgramTiers = () => {
+    const allTiers: Array<{
+      id: string;
+      name: string;
+      pointsRequired: number;
+      description: string;
+    }> = [];
+    
+    userLoyaltyPrograms.forEach(program => {
+      if (program.metadata?.tiers) {
+        const programTiers = program.metadata.tiers.map((tier: any) => ({
+          id: tier.id || String(Math.random()),
+          name: tier.n || tier.name || 'Unnamed Tier',
+          pointsRequired: tier.p || tier.pointsRequired || 0,
+          description: tier.d || tier.description || ''
+        }));
+        allTiers.push(...programTiers);
+      }
+    });
+    
+    // Add default tiers if none were found in programs
+    if (allTiers.length === 0) {
+      allTiers.push(
+        { id: '1', name: 'Bronze', pointsRequired: 0, description: 'Basic rewards' },
+        { id: '2', name: 'Silver', pointsRequired: 500, description: 'Enhanced rewards' },
+        { id: '3', name: 'Gold', pointsRequired: 1000, description: 'Premium rewards' },
+        { id: '4', name: 'Platinum', pointsRequired: 2500, description: 'Elite rewards' }
+      );
+    }
+    
+    return allTiers.sort((a, b) => a.pointsRequired - b.pointsRequired);
+  };
+
+  // Render the XP Manager tab
+  const renderXPManager = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-semibold">Member XP & Tier Management</h3>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => fetchLoyaltyProgramMembers()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            disabled={isMembersLoading}
+          >
+            {isMembersLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <Users size={16} />
+                <span>Refresh Members</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+      
+      {isMembersLoading ? (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600 mr-2"></div>
+          <p className="text-blue-700 dark:text-blue-300">Fetching members from the Algorand blockchain...</p>
+        </div>
+      ) : membersError ? (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-red-700 dark:text-red-300 font-medium">Error loading members: {membersError}</p>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-1">Please try again or check your network connection.</p>
+        </div>
+      ) : members.length === 0 ? (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
+          <Users className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+          <p className="text-yellow-700 dark:text-yellow-300 font-medium">No members found</p>
+          <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+            No wallet addresses have received loyalty passes from your programs yet.
+          </p>
+          <div className="mt-4">
+            <button
+              onClick={() => setActiveTab('members')}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+            >
+              Go to Members
+            </button>
+          </div>
+        </div>
+      ) : (
+        <XPManager 
+          members={members} 
+          onXPUpdated={handleXPUpdated}
+          programTiers={extractProgramTiers()}
+        />
+      )}
+    </div>
+  );
+
+  // Update member data with blockchain XP information
+  const updateMemberXPData = async (member: Member): Promise<Member> => {
+    try {
+      const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+      const xpData = await fetchMemberXPTransactions(member.address, networkType);
+      
+      return {
+        ...member,
+        totalPoints: xpData.totalXP,
+        currentTier: xpData.lastTierChange?.to || determineTier(xpData.totalXP, extractProgramTiers()),
+        xpHistory: xpData.xpHistory
+      };
+    } catch (error) {
+      console.error(`Error updating XP data for member ${member.address}:`, error);
+      return member;
+    }
+  };
+
+  const handleSendMessage = (member: Member) => {
+    setSelectedMemberForMessage(member);
+    setShowMessageCenter(true);
+  };
+
+  const closeMessageCenter = () => {
+    setShowMessageCenter(false);
+    setSelectedMemberForMessage(null);
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
       <div className="flex justify-between items-center mb-8">
@@ -2130,6 +2273,20 @@ export function LoyaltyProgramDashboard() {
             </button>
             <button
               className={`py-3 px-6 font-medium text-lg whitespace-nowrap flex items-center gap-2 ${
+                activeTab === 'xp-manager'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
+              onClick={() => {
+                setActiveTab('xp-manager');
+                fetchLoyaltyProgramMembers(); // Fetch members when tab is clicked
+              }}
+            >
+              <TrendingUp size={20} />
+              XP Manager
+            </button>
+            <button
+              className={`py-3 px-6 font-medium text-lg whitespace-nowrap flex items-center gap-2 ${
                 activeTab === 'transfer'
                   ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                   : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
@@ -2146,6 +2303,7 @@ export function LoyaltyProgramDashboard() {
           {activeTab === 'programs' && renderPrograms()}
           {activeTab === 'members' && renderMembers()}
           {activeTab === 'leaderboard' && renderLeaderboard()}
+          {activeTab === 'xp-manager' && renderXPManager()}
           {activeTab === 'create' && (
             <LoyaltyProgramMinter onLoyaltyProgramMinted={handleLoyaltyProgramMinted} />
           )}
@@ -2176,6 +2334,19 @@ export function LoyaltyProgramDashboard() {
       
       {/* Loyalty Program Pass Modal */}
       {renderLoyaltyPassModal()}
+      
+      {/* Message Center Modal */}
+      {showMessageCenter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <MessageCenter
+              member={selectedMemberForMessage || undefined}
+              isAdmin={true}
+              onClose={closeMessageCenter}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
