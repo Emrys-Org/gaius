@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Award, TrendingUp, CreditCard, MessageSquare } from 'lucide-react';
 import { XPTransaction } from '../utils/xp';
+import { TextWithCopy } from './TextWithCopy';
 
 interface Member {
   id: string;
@@ -62,6 +63,10 @@ export function MemberCard({
     });
   };
 
+  const formatAddress = (address: string) => {
+    return `${address.substring(0, 8)}...${address.substring(address.length - 8)}`;
+  };
+
   // Determine tier progress
   const renderTierProgress = () => {
     // Sort tiers by points required (ascending)
@@ -115,19 +120,25 @@ export function MemberCard({
     <div className="bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">
-          {member.avatar ? (
-            <img src={member.avatar} alt={member.name} className="w-12 h-12 rounded-full" />
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xl font-bold">
-              {member.name.charAt(0)}
-            </div>
-          )}
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xl font-bold">
+            {member.address.substring(0, 2)}
+          </div>
           <div>
-            <h4 className="font-medium text-gray-900 dark:text-white">
-              {member.name}
-            </h4>
+            <div className="font-medium text-gray-900 dark:text-white font-mono">
+              {formatAddress(member.address)}
+              <button 
+                onClick={() => navigator.clipboard.writeText(member.address)}
+                className="ml-2 text-blue-500 hover:text-blue-600 transition-colors"
+                title="Copy wallet address"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {member.address.substring(0, 8)}...{member.address.substring(member.address.length - 4)}
+              Member since {new Date(member.joinDate).toLocaleDateString()}
             </p>
           </div>
         </div>
@@ -250,47 +261,25 @@ export function MemberCard({
                       : 'bg-gray-50 dark:bg-gray-700/50'
                   }`}
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      {transaction.isRevocation ? (
-                        <AlertTriangle className="text-red-500" size={20} />
-                      ) : (
-                        <TrendingUp className="text-green-500" size={20} />
-                      )}
-                      <span className={`text-lg font-bold ${
-                        transaction.isRevocation ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
-                      }`}>
-                        {transaction.isRevocation ? '-' : '+'}{Math.abs(transaction.amount)} XP
-                      </span>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {transaction.isRevocation ? 'XP Revoked' : 'XP Earned'}: {transaction.amount} points
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatDate(transaction.timestamp)} at {formatTime(transaction.timestamp)}
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(transaction.timestamp)}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">{formatTime(transaction.timestamp)}</p>
-                    </div>
+                    <span className={`text-sm font-medium ${
+                      transaction.isRevocation ? 'text-red-600' : 'text-green-600'
+                    }`}>
+                      {transaction.isRevocation ? '-' : '+'}{transaction.amount}
+                    </span>
                   </div>
-                  
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                    {transaction.reason}
-                  </p>
-                  
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                      <Clock size={16} />
-                      <span>Previous: {transaction.previousTotal}</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                      <TrendingUp size={16} />
-                      <span>New: {transaction.newTotal}</span>
-                    </div>
-                  </div>
-                  
-                  {transaction.tierChange && (
-                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-100 dark:border-blue-800">
-                      <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
-                        <Award size={16} />
-                        <span>Tier Change: {transaction.tierChange.from} → {transaction.tierChange.to}</span>
-                      </div>
-                    </div>
+                  {transaction.reason && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {transaction.reason}
+                    </p>
                   )}
                 </div>
               ))}

@@ -3,7 +3,7 @@ import { useWallet } from '@txnlab/use-wallet-react';
 import { motion } from 'framer-motion';
 
 interface HomePageProps {
-  onNavigate: (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass') => void;
+  onNavigate: (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing') => void;
 }
 
 export function HomePage({ onNavigate }: HomePageProps) {
@@ -124,26 +124,26 @@ export function HomePage({ onNavigate }: HomePageProps) {
                 className="text-center"
                 whileHover={{ scale: 1.02 }}
               >
-                              <motion.button 
-                onClick={() => {
-                  if (!activeAddress) {
-                    alert('Please connect your wallet first to create a loyalty program');
-                    return;
-                  }
-                  onNavigate('create-program');
-                }}
-                className="group px-10 py-5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full font-bold text-xl shadow-xl hover:shadow-2xl transition-all text-gray-900 relative overflow-hidden mb-3"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  🚀 Try For Free
-                </span>
-                <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </motion.button>
-              <p className="text-sm text-blue-100 opacity-90">
-                {!activeAddress ? 'Connect wallet to get started' : 'Create your first loyalty program'}
-              </p>
+                <motion.button 
+                  onClick={() => {
+                    if (!activeAddress) {
+                      alert('Please connect your wallet first to create a loyalty program');
+                      return;
+                    }
+                    onNavigate('create-program');
+                  }}
+                  className="group px-10 py-5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full font-bold text-xl shadow-xl hover:shadow-2xl transition-all text-gray-900 relative overflow-hidden mb-3"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    🚀 Try For Free
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </motion.button>
+                <p className="text-sm text-blue-100 opacity-90">
+                  {!activeAddress ? 'Connect wallet to get started' : 'Create your first loyalty program'}
+                </p>
               </motion.div>
               
               <motion.div 
@@ -177,24 +177,18 @@ export function HomePage({ onNavigate }: HomePageProps) {
                 whileHover={{ scale: 1.02 }}
               >
                 <motion.button 
-                  onClick={() => {
-                    if (!activeAddress) {
-                      alert('Please connect your wallet first to send loyalty passes');
-                      return;
-                    }
-                    onNavigate('send-pass');
-                  }}
+                  onClick={() => onNavigate('pricing')}
                   className="group px-10 py-5 bg-white/10 backdrop-blur-md border-2 border-white/30 rounded-full font-bold text-xl hover:bg-white/20 hover:border-white/50 transition-all relative overflow-hidden mb-3"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
                   <span className="relative z-10 flex items-center gap-2">
-                    📨 Send Pass
+                    💰 View Pricing
                   </span>
                   <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </motion.button>
                 <p className="text-sm text-blue-100 opacity-90">
-                  {!activeAddress ? 'Connect wallet to send passes' : 'Send loyalty passes to members'}
+                  See our subscription plans
                 </p>
               </motion.div>
             </motion.div>
@@ -327,6 +321,165 @@ export function HomePage({ onNavigate }: HomePageProps) {
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/0 via-white/30 to-white/0 opacity-20"></div>
               </div>
             </motion.div>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Pricing Section */}
+      <div className="py-20 bg-gray-50 dark:bg-gray-800/30">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div 
+            className="text-center mb-16"
+            variants={itemVariants}
+          >
+            <motion.h2 
+              className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white"
+              variants={itemVariants}
+            >
+              Simple, Transparent Pricing
+            </motion.h2>
+            <motion.p 
+              className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto"
+              variants={itemVariants}
+            >
+              Choose the plan that fits your organization's needs
+            </motion.p>
+          </motion.div>
+
+          <motion.div 
+            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            variants={containerVariants}
+          >
+            {/* Basic Plan */}
+            <motion.div
+              className="bg-white dark:bg-gray-800 rounded-xl p-8 shadow-lg border border-gray-200 dark:border-gray-700"
+              variants={cardVariants}
+              whileHover="hover"
+            >
+              <h3 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Basic</h3>
+              <div className="mb-4">
+                <span className="text-4xl font-bold">5</span>
+                <span className="text-gray-600 dark:text-gray-400"> ALGO</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Up to 100 members</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>3 loyalty programs</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Basic analytics</span>
+                </li>
+              </ul>
+            </motion.div>
+
+            {/* Pro Plan */}
+            <motion.div
+              className="bg-white dark:bg-gray-800 rounded-xl p-8 shadow-lg border-2 border-blue-500 dark:border-blue-500 relative"
+              variants={cardVariants}
+              whileHover="hover"
+            >
+              <div className="absolute top-0 left-0 right-0 bg-blue-500 text-white text-center py-1 text-sm font-medium">
+                Recommended
+              </div>
+              <h3 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white mt-4">Professional</h3>
+              <div className="mb-4">
+                <span className="text-4xl font-bold">20</span>
+                <span className="text-gray-600 dark:text-gray-400"> ALGO</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Up to 1,000 members</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>10 loyalty programs</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Advanced analytics</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Priority support</span>
+                </li>
+              </ul>
+            </motion.div>
+
+            {/* Enterprise Plan */}
+            <motion.div
+              className="bg-white dark:bg-gray-800 rounded-xl p-8 shadow-lg border border-gray-200 dark:border-gray-700"
+              variants={cardVariants}
+              whileHover="hover"
+            >
+              <h3 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Enterprise</h3>
+              <div className="mb-4">
+                <span className="text-4xl font-bold">50</span>
+                <span className="text-gray-600 dark:text-gray-400"> ALGO</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Unlimited members</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Unlimited programs</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Premium analytics</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Dedicated support</span>
+                </li>
+              </ul>
+            </motion.div>
+          </motion.div>
+
+          <motion.div 
+            className="text-center mt-12"
+            variants={itemVariants}
+          >
+            <motion.button 
+              onClick={() => onNavigate('pricing')}
+              className="px-8 py-4 bg-blue-500 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-xl transition-all"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              View All Plans
+            </motion.button>
           </motion.div>
         </div>
       </div>

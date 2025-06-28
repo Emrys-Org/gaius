@@ -85,8 +85,8 @@ export const sendMessage = async (
     
     // Create payment transaction with message in note field
     const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-      from: validatedSender,
-      to: validatedReceiver,
+      sender: validatedSender,
+      receiver: validatedReceiver,
       amount: 1000, // 0.001 Algos
       note: noteBytes,
       suggestedParams

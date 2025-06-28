@@ -441,7 +441,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
               <div className="flex justify-between items-end">
                 <div>
                   <p className="text-xs opacity-80 drop-shadow-sm">MEMBER SINCE</p>
-                  <p className="text-sm font-medium drop-shadow-sm">2024</p>
+                  <p className="text-sm font-medium drop-shadow-sm">{new Date().getFullYear()}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs opacity-80 drop-shadow-sm">POINTS</p>

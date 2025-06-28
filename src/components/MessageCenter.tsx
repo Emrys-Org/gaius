@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import { Message, sendMessage as sendMessageUtil, fetchMessages } from '../utils/messages';
 import { MessageSquare, Send, X, ChevronLeft, AlertCircle } from 'lucide-react';
+import { TextWithCopy } from './TextWithCopy';
 
 interface Member {
   id: string;
@@ -71,7 +72,9 @@ export function MessageCenter({ member, isAdmin = false, onClose, recipientAddre
       return;
     }
 
-    if (!recipient || !recipient.trim()) {
+    // Ensure recipient is defined and not empty
+    const recipientAddress = recipient?.trim();
+    if (!recipientAddress) {
       setError('Recipient address is required');
       return;
     }
@@ -93,7 +96,7 @@ export function MessageCenter({ member, isAdmin = false, onClose, recipientAddre
       const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
       await sendMessageUtil(
         activeAddress,
-        recipient.trim(),
+        recipientAddress,
         subject,
         content,
         selectedPassId || (member?.assetIds?.[0]),
@@ -118,14 +121,11 @@ export function MessageCenter({ member, isAdmin = false, onClose, recipientAddre
     return new Date(timestamp).toLocaleString();
   };
 
-  const getDisplayName = (address: string): string => {
-    if (member && (address === member.address)) {
-      return member.name;
-    }
+  const getDisplayAddress = (address: string): string => {
     if (address === activeAddress) {
       return 'You';
     }
-    return `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;
+    return address;
   };
 
   return (
@@ -186,9 +186,9 @@ export function MessageCenter({ member, isAdmin = false, onClose, recipientAddre
                   placeholder="Recipient's Algorand address"
                 />
                 {member && (
-                  <p className="mt-1 text-sm text-gray-500">
-                    Sending to: {member.name}
-                  </p>
+                  <div className="mt-2">
+                    <TextWithCopy text={member.address} />
+                  </div>
                 )}
               </div>
               <div>
@@ -237,7 +237,7 @@ export function MessageCenter({ member, isAdmin = false, onClose, recipientAddre
               <div className="flex justify-end">
                 <button
                   onClick={handleSendMessage}
-                  disabled={sending || !recipient.trim() || !subject.trim() || !content.trim()}
+                  disabled={sending || !recipient?.trim() || !subject.trim() || !content.trim()}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sending ? (
@@ -271,10 +271,14 @@ export function MessageCenter({ member, isAdmin = false, onClose, recipientAddre
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <h3 className="font-medium">{message.subject}</h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
                             {message.sender === activeAddress ? 'To: ' : 'From: '}
-                            {getDisplayName(message.sender === activeAddress ? message.receiver : message.sender)}
-                          </p>
+                            {message.sender === activeAddress ? (
+                              <TextWithCopy text={message.receiver} />
+                            ) : (
+                              <TextWithCopy text={message.sender} />
+                            )}
+                          </div>
                         </div>
                         <span className="text-xs text-gray-500">{formatDate(message.timestamp)}</span>
                       </div>

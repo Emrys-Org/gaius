@@ -12,11 +12,13 @@ import { TextWithCopy } from './components/TextWithCopy'
 import { LoyaltyProgramDashboard } from './components/LoyaltyProgramDashboard'
 import { LoyaltyProgramMinter } from './components/LoyaltyProgramMinter'
 import { LoyaltyPassSender } from './components/LoyaltyPassSender'
+import { PricingPlans } from './components/PricingPlans'
 import { HomePage } from './components/HomePage'
 import { useState, useEffect } from 'react'
 import algosdk from 'algosdk'
 import { getAlgodClient } from './utils/algod'
 import { getIPFSGatewayURL } from './utils/pinata'
+import { Check } from 'lucide-react'
 
 const walletManager = new WalletManager({
   wallets: [
@@ -35,8 +37,9 @@ const walletManager = new WalletManager({
 function AppContent() {
   const { activeAddress, activeWallet } = useWallet();
   const { activeNetwork, setActiveNetwork } = useNetwork();
-  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing'>('home');
   const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
 
   // Fetch user loyalty programs
   const fetchUserLoyaltyPrograms = async () => {
@@ -108,7 +111,7 @@ function AppContent() {
   }, [activeAddress, currentPage, activeNetwork]);
 
   // Redirect to home if trying to access dashboard without wallet
-  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass') => {
+  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing') => {
     if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !activeAddress) {
       // Don't navigate to dashboard or create program without wallet connection
       return;
@@ -135,6 +138,13 @@ function AppContent() {
       console.error('Failed to switch network:', error);
       alert('Failed to switch network. Please try again.');
     }
+  };
+
+  // Handle subscription completion
+  const handleSubscriptionComplete = (plan: string) => {
+    setSubscriptionPlan(plan);
+    // You could store this in localStorage or a database in a real application
+    console.log(`Subscription completed for plan: ${plan}`);
   };
 
   return (
@@ -184,6 +194,12 @@ function AppContent() {
                   Send Pass
                   {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
                 </button>
+                <button 
+                  onClick={() => handleNavigation('pricing')} 
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'pricing' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                >
+                  Pricing
+                </button>
               </nav>
             </div>
             <div className="flex items-center gap-4">
@@ -220,7 +236,7 @@ function AppContent() {
                     ← Back to Home
                   </button>
                 </div>
-                <WalletInfo />
+            <WalletInfo />
                 <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
                   <div className="flex justify-between items-center mb-8">
                     <h2 className="text-3xl font-bold">Create Your Loyalty Program</h2>
@@ -233,7 +249,7 @@ function AppContent() {
                       }`}>
                         {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
                       </span>
-                </div>
+              </div>  
                 </div>
                   <LoyaltyProgramMinter onLoyaltyProgramMinted={() => handleNavigation('loyalty-dashboard')} />
                 </div>
@@ -259,11 +275,48 @@ function AppContent() {
                   />
                 </div>
               </div>
+            ) : currentPage === 'pricing' ? (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                <div className="mb-6">
+                  <button
+                    onClick={() => handleNavigation('home')}
+                    className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  >
+                    ← Back to Home
+                  </button>
+                </div>
+                {activeAddress && subscriptionPlan ? (
+                  <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
+                    <div className="text-center py-8">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full mb-4">
+                        <Check size={32} />
+                    </div>
+                      <h2 className="text-2xl font-bold mb-2">Active Subscription</h2>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        You're currently subscribed to the {subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1)} plan.
+                      </p>
+                      <div className="mt-6">
+                        <button
+                          onClick={() => handleNavigation('loyalty-dashboard')}
+                          className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                        >
+                          Go to Dashboard
+                        </button>
+                    </div>
+                    </div>
+                  </div>
+                ) : (
+                  <PricingPlans onSubscriptionComplete={handleSubscriptionComplete} />
+                )}
+                </div>
             ) : (
               <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 <WalletInfo />
-                <LoyaltyProgramDashboard />
-            </div>
+                <LoyaltyProgramDashboard 
+                  subscriptionPlan={subscriptionPlan}
+                  onNavigateToPricing={() => handleNavigation('pricing')}
+                />
+              </div>
             )}
           </main>
       

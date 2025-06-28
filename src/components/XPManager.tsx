@@ -66,8 +66,7 @@ export function XPManager({ members, onXPUpdated, programTiers = [] }: XPManager
   // Filter members based on search query
   const filteredMembers = searchQuery 
     ? members.filter(member => 
-        member.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        member.address.toLowerCase().includes(searchQuery.toLowerCase()))
     : members;
 
   // Determine tier based on points
@@ -208,7 +207,7 @@ export function XPManager({ members, onXPUpdated, programTiers = [] }: XPManager
           onXPUpdated(updatedMember);
           
           // Set success message
-          let successMessage = `Successfully assigned ${xpAmount} XP to ${selectedMember.name || selectedMember.address.substring(0, 8)}...`;
+          let successMessage = `Successfully assigned ${xpAmount} XP to ${selectedMember.address.substring(0, 6)}...${selectedMember.address.substring(selectedMember.address.length - 4)}`;
           if (tierChange.upgraded) {
             successMessage += ` Member upgraded from ${tierChange.oldTier} to ${tierChange.newTier}!`;
           }
@@ -343,7 +342,7 @@ export function XPManager({ members, onXPUpdated, programTiers = [] }: XPManager
         
         setResult({ 
           success: true, 
-          message: `Successfully revoked ${xpAmount} XP from ${selectedMember.name}${tierChange.upgraded ? `. Member moved from ${tierChange.oldTier} to ${tierChange.newTier} tier.` : ''}`
+          message: `Successfully revoked ${xpAmount} XP from ${selectedMember.address.substring(0, 6)}...${selectedMember.address.substring(selectedMember.address.length - 4)}${tierChange.upgraded ? `. Member moved from ${tierChange.oldTier} to ${tierChange.newTier} tier.` : ''}`
         });
         
         // Reset form
@@ -452,10 +451,7 @@ export function XPManager({ members, onXPUpdated, programTiers = [] }: XPManager
                     >
                       <div className="flex justify-between items-center">
                         <div>
-                          <p className="font-medium">
-                            {member.name || `Member ${member.id}`}
-                          </p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                          <p className="font-medium font-mono">
                             {member.address.substring(0, 8)}...{member.address.substring(member.address.length - 4)}
                           </p>
                           <div className="mt-1">
