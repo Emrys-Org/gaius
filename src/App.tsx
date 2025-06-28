@@ -13,10 +13,11 @@ import { LoyaltyProgramDashboard } from './components/LoyaltyProgramDashboard'
 import { LoyaltyProgramMinter } from './components/LoyaltyProgramMinter'
 import { LoyaltyPassSender } from './components/LoyaltyPassSender'
 import { HomePage } from './components/HomePage'
-import { useState, useEffect } from 'react'
-import algosdk from 'algosdk'
+import { LoadingSpinner } from './components/LoadingSpinner'
+import { useState, useEffect, useCallback } from 'react'
 import { getAlgodClient } from './utils/algod'
 import { getIPFSGatewayURL } from './utils/pinata'
+import { motion, AnimatePresence } from 'framer-motion'
 
 const walletManager = new WalletManager({
   wallets: [
@@ -32,269 +33,492 @@ const walletManager = new WalletManager({
   defaultNetwork: NetworkId.TESTNET,
 })
 
+interface LoyaltyProgram {
+  id: number;
+  name: string;
+  imageUrl: string;
+  metadata: Record<string, unknown> | null;
+}
+
 function AppContent() {
-  const { activeAddress, activeWallet } = useWallet();
-  const { activeNetwork, setActiveNetwork } = useNetwork();
-  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass'>('home');
-  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
+  const { activeAddress, activeWallet } = useWallet()
+  const { activeNetwork, setActiveNetwork } = useNetwork()
+  const [currentPage, setCurrentPage] = useState<
+    'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass'
+  >('home')
+  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<LoyaltyProgram[]>([])
+  const [isLoadingPrograms, setIsLoadingPrograms] = useState(false)
+  const [isPageTransitioning, setIsPageTransitioning] = useState(false)
 
   // Fetch user loyalty programs
-  const fetchUserLoyaltyPrograms = async () => {
-    if (!activeAddress) return;
-    
+  const fetchUserLoyaltyPrograms = useCallback(async () => {
+    if (!activeAddress) return
+
+    setIsLoadingPrograms(true)
     try {
-      const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
-      const algodClient = getAlgodClient(networkType);
-      
-      const accountInfo = await algodClient.accountInformation(activeAddress).do();
-      const assets = accountInfo.assets || [];
-      
-      const programsInfo: any[] = [];
-      
+      const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet'
+      const algodClient = getAlgodClient(networkType)
+
+      const accountInfo = await algodClient
+        .accountInformation(activeAddress)
+        .do()
+      const assets = accountInfo.assets || []
+
+      const programsInfo: LoyaltyProgram[] = []
+
       for (const asset of assets) {
-        if (typeof asset.amount === 'bigint' ? asset.amount === 0n : asset.amount === 0) continue;
-        
+        if (
+          typeof asset.amount === 'bigint'
+            ? asset.amount === 0n
+            : asset.amount === 0
+        )
+          continue
+
         try {
-          const assetInfo = await algodClient.getAssetByID(asset.assetId).do();
-          const params = assetInfo.params;
-          
-          const totalSupply = typeof params.total === 'bigint' ? Number(params.total) : Number(params.total);
-          const isLoyaltyProgram = totalSupply === 1 && params.decimals === 0;
-          
+          const assetInfo = await algodClient.getAssetByID(asset.assetId).do()
+          const params = assetInfo.params
+
+          const totalSupply =
+            typeof params.total === 'bigint'
+              ? Number(params.total)
+              : Number(params.total)
+          const isLoyaltyProgram = totalSupply === 1 && params.decimals === 0
+
           if (isLoyaltyProgram) {
-            let url = params.url || '';
-            let imageUrl = url;
-            let metadata = null;
-            
+            const url = params.url || ''
+            let imageUrl = url
+            let metadata = null
+
             if (url && (url.startsWith('ipfs://') || url.includes('/ipfs/'))) {
-              imageUrl = getIPFSGatewayURL(url);
-              
+              imageUrl = getIPFSGatewayURL(url)
+
               try {
-                const response = await fetch(imageUrl);
+                const response = await fetch(imageUrl)
                 if (response.ok) {
-                  metadata = await response.json();
+                  metadata = await response.json()
                   if (metadata.image) {
-                    imageUrl = getIPFSGatewayURL(metadata.image);
+                    imageUrl = getIPFSGatewayURL(metadata.image)
                   }
                 }
               } catch (e) {
-                console.warn(`Failed to fetch metadata for asset ${asset.assetId}`, e);
+                console.warn(
+                  `Failed to fetch metadata for asset ${asset.assetId}`,
+                  e,
+                )
               }
             }
-            
+
             programsInfo.push({
-              id: typeof asset.assetId === 'bigint' ? Number(asset.assetId) : asset.assetId,
+              id:
+                typeof asset.assetId === 'bigint'
+                  ? Number(asset.assetId)
+                  : asset.assetId,
               name: params.name || 'Unnamed Loyalty Program',
               imageUrl,
-              metadata
-            });
+              metadata,
+            })
           }
         } catch (error) {
-          console.error(`Error fetching asset ${asset.assetId} info:`, error);
+          console.error(`Error fetching asset ${asset.assetId} info:`, error)
         }
       }
-      
-      setUserLoyaltyPrograms(programsInfo);
+
+      setUserLoyaltyPrograms(programsInfo)
     } catch (error) {
-      console.error('Error fetching loyalty programs:', error);
+      console.error('Error fetching loyalty programs:', error)
+    } finally {
+      setIsLoadingPrograms(false)
     }
-  };
+  }, [activeAddress, activeNetwork])
 
   // Fetch loyalty programs when user navigates to send-pass page
   useEffect(() => {
     if (activeAddress && currentPage === 'send-pass') {
-      fetchUserLoyaltyPrograms();
+      fetchUserLoyaltyPrograms()
     }
-  }, [activeAddress, currentPage, activeNetwork]);
+  }, [activeAddress, currentPage, fetchUserLoyaltyPrograms])
 
   // Redirect to home if trying to access dashboard without wallet
-  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass') => {
-    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !activeAddress) {
+  const handleNavigation = async (
+    page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass',
+  ) => {
+    if (
+      (page === 'loyalty-dashboard' ||
+        page === 'create-program' ||
+        page === 'send-pass') &&
+      !activeAddress
+    ) {
       // Don't navigate to dashboard or create program without wallet connection
-      return;
+      return
     }
-    setCurrentPage(page);
-  };
+
+    setIsPageTransitioning(true)
+    // Add a small delay for smooth transition
+    setTimeout(() => {
+      setCurrentPage(page)
+      setIsPageTransitioning(false)
+    }, 150)
+  }
 
   // Handle network switching
-  const handleNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const networkId = event.target.value as NetworkId;
+  const handleNetworkChange = async (
+    event: React.ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const networkId = event.target.value as NetworkId
     try {
       // Disconnect wallet before switching networks to avoid connection issues
       if (activeWallet?.isConnected) {
-        await activeWallet.disconnect();
+        await activeWallet.disconnect()
       }
-      
-      await setActiveNetwork(networkId);
-      
+
+      await setActiveNetwork(networkId)
+
       // Show a message to the user to reconnect their wallet
       if (activeAddress) {
-        alert('Network switched successfully. Please reconnect your wallet for the new network.');
+        alert(
+          'Network switched successfully. Please reconnect your wallet for the new network.',
+        )
       }
     } catch (error) {
-      console.error('Failed to switch network:', error);
-      alert('Failed to switch network. Please try again.');
+      console.error('Failed to switch network:', error)
+      alert('Failed to switch network. Please try again.')
     }
-  };
+  }
+
+  // Page transition variants
+  const pageVariants = {
+    initial: { opacity: 0, x: 20 },
+    in: { opacity: 1, x: 0 },
+    out: { opacity: 0, x: -20 }
+  }
+
+  const pageTransition = {
+    type: 'tween',
+    ease: 'anticipate',
+    duration: 0.3
+  }
 
   return (
-        <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
-          {/* Header */}
-          <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-8">
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
-                Gaius
-                  </span>
-              <nav className="hidden md:flex space-x-4">
-                <button 
-                  onClick={() => handleNavigation('home')} 
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'home' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+    <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
+      {/* Header */}
+      <motion.header 
+        className="w-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700/50 sticky top-0 z-50"
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+      >
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <motion.div 
+              className="flex items-center space-x-4"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+            >
+              <div className="flex items-center space-x-3">
+                <motion.img 
+                  src="/gaiuslogo-app.png" 
+                  alt="Gaius Logo" 
+                  className="h-10 w-auto logo-bounce"
+                  whileHover={{ scale: 1.1 }}
+                  transition={{ type: 'spring', stiffness: 400 }}
+                />
+                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
+                  Gaius
+                </span>
+              </div>
+              
+              <nav className="hidden md:flex space-x-1">
+                <motion.button
+                  onClick={() => handleNavigation('home')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 focus-ring ${
+                    currentPage === 'home' 
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' 
+                      : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
                   Home
-                </button>
-                <button 
-                  onClick={() => handleNavigation('loyalty-dashboard')} 
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    !activeAddress 
-                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50' 
-                      : currentPage === 'loyalty-dashboard' 
-                        ? 'text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'
+                </motion.button>
+                <motion.button
+                  onClick={() => handleNavigation('loyalty-dashboard')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 focus-ring ${
+                    !activeAddress
+                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50'
+                      : currentPage === 'loyalty-dashboard'
+                        ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                   }`}
                   disabled={!activeAddress}
-                  title={!activeAddress ? 'Connect your wallet to access the organization dashboard' : ''}
+                  title={
+                    !activeAddress
+                      ? 'Connect your wallet to access the organization dashboard'
+                      : ''
+                  }
+                  whileHover={activeAddress ? { scale: 1.05 } : {}}
+                  whileTap={activeAddress ? { scale: 0.95 } : {}}
                 >
                   Organization Dashboard
                   {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
-                </button>
-                <button 
-                  onClick={() => handleNavigation('send-pass')} 
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    !activeAddress 
-                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50' 
-                      : currentPage === 'send-pass' 
-                        ? 'text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'
+                </motion.button>
+                <motion.button
+                  onClick={() => handleNavigation('send-pass')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 focus-ring ${
+                    !activeAddress
+                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50'
+                      : currentPage === 'send-pass'
+                        ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                   }`}
                   disabled={!activeAddress}
-                  title={!activeAddress ? 'Connect your wallet to send loyalty passes' : ''}
+                  title={
+                    !activeAddress
+                      ? 'Connect your wallet to send loyalty passes'
+                      : ''
+                  }
+                  whileHover={activeAddress ? { scale: 1.05 } : {}}
+                  whileTap={activeAddress ? { scale: 0.95 } : {}}
                 >
                   Send Pass
                   {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
-                </button>
+                </motion.button>
               </nav>
-            </div>
-            <div className="flex items-center gap-4">
+            </motion.div>
+            
+            <motion.div 
+              className="flex items-center gap-4"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+            >
               {/* Network Selector - only show when wallet is connected */}
               {activeAddress && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Network:</span>
-                  <select 
-                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                <motion.div 
+                  className="flex items-center gap-2"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4, duration: 0.4 }}
+                >
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Network:
+                  </span>
+                  <select
+                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus-ring transition-all duration-200 hover:border-blue-500 dark:hover:border-blue-400"
                     value={activeNetwork}
                     onChange={handleNetworkChange}
                   >
                     <option value={NetworkId.TESTNET}>TestNet</option>
                     <option value={NetworkId.MAINNET}>MainNet</option>
                   </select>
-                </div>
+                </motion.div>
               )}
-                  <WalletButton />
-                </div>
-              </div>
-            </div>
-          </header>
-          {/* Main content area */}
-                <main>
-            {currentPage === 'home' ? (
+              <WalletButton />
+            </motion.div>
+          </div>
+        </div>
+      </motion.header>
+
+      {/* Main content area */}
+      <main className="relative">
+        <AnimatePresence mode="wait">
+          {isPageTransitioning ? (
+            <motion.div
+              key="loading"
+              className="flex items-center justify-center min-h-[60vh]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <LoadingSpinner size="xl" />
+            </motion.div>
+          ) : currentPage === 'home' ? (
+            <motion.div
+              key="home"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <HomePage onNavigate={handleNavigation} />
-            ) : currentPage === 'create-program' ? (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <div className="mb-6">
-                  <button
-                    onClick={() => handleNavigation('home')}
-                    className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-                  >
-                    ← Back to Home
-                  </button>
-                </div>
-                <WalletInfo />
-                <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
-                  <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-3xl font-bold">Create Your Loyalty Program</h2>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">Network:</span>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        activeNetwork === 'mainnet' 
+            </motion.div>
+          ) : currentPage === 'create-program' ? (
+            <motion.div
+              key="create-program"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
+            >
+              <motion.div 
+                className="mb-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <motion.button
+                  onClick={() => handleNavigation('home')}
+                  className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all duration-200 hover:gap-3"
+                  whileHover={{ x: -5 }}
+                >
+                  ← Back to Home
+                </motion.button>
+              </motion.div>
+              <WalletInfo />
+              <motion.div 
+                className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8 card-hover"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-3xl font-bold">
+                    Create Your Loyalty Program
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      Network:
+                    </span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 ${
+                        activeNetwork === 'mainnet'
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
                           : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
-                      }`}>
-                        {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
-                      </span>
+                      }`}
+                    >
+                      {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
+                    </span>
+                  </div>
                 </div>
-                </div>
-                  <LoyaltyProgramMinter onLoyaltyProgramMinted={() => handleNavigation('loyalty-dashboard')} />
-                </div>
-              </div>
-            ) : currentPage === 'send-pass' ? (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <div className="mb-6">
-                  <button
-                    onClick={() => handleNavigation('home')}
-                    className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-                  >
-                    ← Back to Home
-                  </button>
-                </div>
-                <WalletInfo />
-                <div className="mt-8">
-                  <LoyaltyPassSender 
+                <LoyaltyProgramMinter
+                  onLoyaltyProgramMinted={() =>
+                    handleNavigation('loyalty-dashboard')
+                  }
+                />
+              </motion.div>
+            </motion.div>
+          ) : currentPage === 'send-pass' ? (
+            <motion.div
+              key="send-pass"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
+            >
+              <motion.div 
+                className="mb-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <motion.button
+                  onClick={() => handleNavigation('home')}
+                  className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all duration-200 hover:gap-3"
+                  whileHover={{ x: -5 }}
+                >
+                  ← Back to Home
+                </motion.button>
+              </motion.div>
+              <WalletInfo />
+              <motion.div 
+                className="mt-8"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                {isLoadingPrograms ? (
+                  <div className="flex items-center justify-center py-12">
+                    <LoadingSpinner size="lg" text="Loading your loyalty programs..." />
+                  </div>
+                ) : (
+                  <LoyaltyPassSender
                     loyaltyPrograms={userLoyaltyPrograms}
                     onPassSent={(assetId) => {
-                      console.log('Pass sent with asset ID:', assetId);
+                      console.log('Pass sent with asset ID:', assetId)
                       // You can add additional logic here, like refreshing the dashboard
                     }}
                   />
-                </div>
-              </div>
-            ) : (
-              <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <WalletInfo />
-                <LoyaltyProgramDashboard />
-            </div>
-            )}
-          </main>
-      
+                )}
+              </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="loyalty-dashboard"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+              className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
+            >
+              <WalletInfo />
+              <LoyaltyProgramDashboard />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
       {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-700/50 py-8">
+      <motion.footer 
+        className="bg-white dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-700/50 py-8"
+        initial={{ opacity: 0, y: 50 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5, duration: 0.6 }}
+      >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="mb-4 md:mb-0">
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
-                Gaius
-              </span>
+            <motion.div 
+              className="mb-4 md:mb-0"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <div className="flex items-center space-x-2">
+                <img src="/gaiuslogo-app.png" alt="Gaius Logo" className="h-6 w-auto" />
+                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
+                  Gaius
+                </span>
+              </div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 All-in-One Loyalty Program
               </p>
-            </div>
-            <div className="flex space-x-6">
-              <a href="#" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+            </motion.div>
+            <motion.div 
+              className="flex space-x-6"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.7 }}
+            >
+              <a
+                href="#"
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors duration-200"
+              >
                 Terms
               </a>
-              <a href="#" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+              <a
+                href="#"
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors duration-200"
+              >
                 Privacy
               </a>
-              <a href="#" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+              <a
+                href="#"
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors duration-200"
+              >
                 Support
               </a>
-            </div>
+            </motion.div>
           </div>
         </div>
-      </footer>
+      </motion.footer>
     </div>
-  );
+  )
 }
 
 function App() {
@@ -304,7 +528,7 @@ function App() {
         <AppContent />
       </WalletUIProvider>
     </WalletProvider>
-  );
+  )
 }
 
 export default App
