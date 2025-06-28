@@ -38,74 +38,89 @@ const walletManager = new WalletManager({
 })
 
 interface LoyaltyProgram {
-  id: number;
-  name: string;
-  imageUrl: string;
-  metadata: Record<string, unknown> | null;
+  id: number
+  name: string
+  imageUrl: string
+  metadata: Record<string, unknown> | null
 }
 
 function AppContent() {
-  const { activeAddress, activeWallet } = useWallet();
-  const { activeNetwork, setActiveNetwork } = useNetwork();
-  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth'>('home');
-  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
-  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
-  const [session, setSession] = useState<any>(null);
-  const [adminName, setAdminName] = useState<string | null>(null);
+  const { activeAddress, activeWallet } = useWallet()
+  const { activeNetwork, setActiveNetwork } = useNetwork()
+  const [currentPage, setCurrentPage] = useState<
+    | 'home'
+    | 'loyalty-dashboard'
+    | 'create-program'
+    | 'send-pass'
+    | 'pricing'
+    | 'auth'
+  >('home')
+  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([])
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null)
+  const [session, setSession] = useState<any>(null)
+  const [adminName, setAdminName] = useState<string | null>(null)
+
+  const [isLoadingPrograms, setIsLoadingPrograms] = useState(false)
+  const [isPageTransitioning, setIsPageTransitioning] = useState(false)
 
   // Listen for auth changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      setSession(session)
       if (session) {
-        fetchAdminName();
+        fetchAdminName()
       }
-    });
+    })
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      setSession(session)
       if (session) {
-        fetchAdminName();
+        fetchAdminName()
       } else {
-        setAdminName(null);
+        setAdminName(null)
       }
-    });
+    })
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Fetch admin name from Supabase
   const fetchAdminName = async () => {
-    if (!activeAddress) return;
-    
+    if (!activeAddress) return
+
     try {
       const { data, error } = await supabase
         .from('organization_admins')
         .select('full_name')
         .eq('wallet_address', activeAddress)
-        .single();
-      
+        .single()
+
       if (error) {
-        console.error('Error fetching admin name:', error);
-        return;
+        console.error('Error fetching admin name:', error)
+        return
       }
-      
+
       if (data) {
-        setAdminName(data.full_name);
+        setAdminName(data.full_name)
       }
     } catch (error) {
-      console.error('Error fetching admin name:', error);
+      console.error('Error fetching admin name:', error)
     }
-  };
+  }
 
   // Redirect to auth if trying to access protected pages without being authenticated
   useEffect(() => {
-    if (!session && (currentPage === 'loyalty-dashboard' || currentPage === 'create-program' || currentPage === 'send-pass')) {
-      setCurrentPage('auth');
+    if (
+      !session &&
+      (currentPage === 'loyalty-dashboard' ||
+        currentPage === 'create-program' ||
+        currentPage === 'send-pass')
+    ) {
+      setCurrentPage('auth')
     }
-  }, [session, currentPage]);
+  }, [session, currentPage])
 
   // Fetch user loyalty programs
   const fetchUserLoyaltyPrograms = useCallback(async () => {
@@ -193,24 +208,42 @@ function AppContent() {
     if (activeAddress && currentPage === 'send-pass') {
       fetchUserLoyaltyPrograms()
     }
-  }, [activeAddress, currentPage, activeNetwork]);
+  }, [activeAddress, currentPage, activeNetwork])
 
   // Effect to fetch admin name when address changes
   useEffect(() => {
     if (activeAddress && session) {
-      fetchAdminName();
+      fetchAdminName()
     }
-  }, [activeAddress, session]);
+  }, [activeAddress, session])
 
   // Redirect to home if trying to access dashboard without wallet
-  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth') => {
-    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !activeAddress) {
-      return;
+  const handleNavigation = (
+    page:
+      | 'home'
+      | 'loyalty-dashboard'
+      | 'create-program'
+      | 'send-pass'
+      | 'pricing'
+      | 'auth',
+  ) => {
+    if (
+      (page === 'loyalty-dashboard' ||
+        page === 'create-program' ||
+        page === 'send-pass') &&
+      !activeAddress
+    ) {
+      return
     }
-    
-    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !session) {
-      setCurrentPage('auth');
-      return;
+
+    if (
+      (page === 'loyalty-dashboard' ||
+        page === 'create-program' ||
+        page === 'send-pass') &&
+      !session
+    ) {
+      setCurrentPage('auth')
+      return
     }
 
     setIsPageTransitioning(true)
@@ -250,26 +283,26 @@ function AppContent() {
   const pageVariants = {
     initial: { opacity: 0, x: 20 },
     in: { opacity: 1, x: 0 },
-    out: { opacity: 0, x: -20 }
+    out: { opacity: 0, x: -20 },
   }
 
   const pageTransition = {
     type: 'tween',
     ease: 'anticipate',
-    duration: 0.3
+    duration: 0.3,
   }
 
   // Handle subscription completion
   const handleSubscriptionComplete = (plan: string) => {
-    setSubscriptionPlan(plan);
+    setSubscriptionPlan(plan)
     // You could store this in localStorage or a database in a real application
-    console.log(`Subscription completed for plan: ${plan}`);
-  };
+    console.log(`Subscription completed for plan: ${plan}`)
+  }
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
       {/* Header */}
-      <motion.header 
+      <motion.header
         className="w-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700/50 sticky top-0 z-50"
         initial={{ y: -100 }}
         animate={{ y: 0 }}
@@ -277,16 +310,16 @@ function AppContent() {
       >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <motion.div 
+            <motion.div
               className="flex items-center space-x-4"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
             >
               <div className="flex items-center space-x-3">
-                <motion.img 
-                  src="/gaiuslogo-app.png" 
-                  alt="Gaius Logo" 
+                <motion.img
+                  src="/gaiuslogo-app.png"
+                  alt="Gaius Logo"
                   className="h-10 w-auto logo-bounce"
                   whileHover={{ scale: 1.1 }}
                   transition={{ type: 'spring', stiffness: 400 }}
@@ -295,13 +328,13 @@ function AppContent() {
                   Gaius
                 </span>
               </div>
-              
+
               <nav className="hidden md:flex space-x-1">
                 <motion.button
                   onClick={() => handleNavigation('home')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 focus-ring ${
-                    currentPage === 'home' 
-                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' 
+                    currentPage === 'home'
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
                       : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                   }`}
                   whileHover={{ scale: 1.05 }}
@@ -351,16 +384,15 @@ function AppContent() {
                   Send Pass
                   {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
                 </motion.button>
-                </button>
-                <button 
-                  onClick={() => handleNavigation('pricing')} 
+                <button
+                  onClick={() => handleNavigation('pricing')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'pricing' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
                 >
                   Pricing
                 </button>
                 {!session && (
-                  <button 
-                    onClick={() => handleNavigation('auth')} 
+                  <button
+                    onClick={() => handleNavigation('auth')}
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'auth' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
                   >
                     Sign In / Sign Up
@@ -368,8 +400,8 @@ function AppContent() {
                 )}
               </nav>
             </motion.div>
-            
-            <motion.div 
+
+            <motion.div
               className="flex items-center gap-4"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -377,7 +409,7 @@ function AppContent() {
             >
               {/* Network Selector - only show when wallet is connected */}
               {activeAddress && (
-                <motion.div 
+                <motion.div
                   className="flex items-center gap-2"
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -437,7 +469,7 @@ function AppContent() {
               transition={pageTransition}
               className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
             >
-              <motion.div 
+              <motion.div
                 className="mb-6"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -452,7 +484,7 @@ function AppContent() {
                 </motion.button>
               </motion.div>
               <WalletInfo />
-              <motion.div 
+              <motion.div
                 className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8 card-hover"
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -494,7 +526,7 @@ function AppContent() {
               transition={pageTransition}
               className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
             >
-              <motion.div 
+              <motion.div
                 className="mb-6"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -509,7 +541,7 @@ function AppContent() {
                 </motion.button>
               </motion.div>
               <WalletInfo />
-              <motion.div 
+              <motion.div
                 className="mt-8"
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -517,7 +549,10 @@ function AppContent() {
               >
                 {isLoadingPrograms ? (
                   <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner size="lg" text="Loading your loyalty programs..." />
+                    <LoadingSpinner
+                      size="lg"
+                      text="Loading your loyalty programs..."
+                    />
                   </div>
                 ) : (
                   <LoyaltyPassSender
@@ -548,7 +583,7 @@ function AppContent() {
       </main>
 
       {/* Footer */}
-      <motion.footer 
+      <motion.footer
         className="bg-white dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-700/50 py-8"
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
@@ -556,14 +591,18 @@ function AppContent() {
       >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <motion.div 
+            <motion.div
               className="mb-4 md:mb-0"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
               <div className="flex items-center space-x-2">
-                <img src="/gaiuslogo-app.png" alt="Gaius Logo" className="h-6 w-auto" />
+                <img
+                  src="/gaiuslogo-app.png"
+                  alt="Gaius Logo"
+                  className="h-6 w-auto"
+                />
                 <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
                   Gaius
                 </span>
@@ -572,7 +611,7 @@ function AppContent() {
                 All-in-One Loyalty Program
               </p>
             </motion.div>
-            <motion.div 
+            <motion.div
               className="flex space-x-6"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
