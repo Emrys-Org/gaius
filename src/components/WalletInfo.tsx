@@ -1,11 +1,46 @@
 import { useWallet } from '@txnlab/use-wallet-react';
 import { useAccountInfo, useNfd, NfdAvatar } from '@txnlab/use-wallet-ui-react';
 import { formatNumber, formatShortAddress } from '@txnlab/utils-ts';
+import { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+import { User } from 'lucide-react';
 
 export function WalletInfo() {
   const { activeAddress } = useWallet();
   const nfdQuery = useNfd();
   const accountQuery = useAccountInfo();
+  const [adminName, setAdminName] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Fetch admin info when address changes
+  useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (!activeAddress) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('organization_admins')
+          .select('full_name')
+          .eq('wallet_address', activeAddress)
+          .single();
+        
+        if (error) {
+          console.log('Not an admin or error fetching admin info:', error);
+          setIsAdmin(false);
+          return;
+        }
+        
+        if (data) {
+          setAdminName(data.full_name);
+          setIsAdmin(true);
+        }
+      } catch (error) {
+        console.error('Error fetching admin info:', error);
+      }
+    };
+    
+    fetchAdminInfo();
+  }, [activeAddress]);
 
   if (!activeAddress) {
     return (
@@ -40,13 +75,32 @@ export function WalletInfo() {
         <div className="flex items-center gap-4">
           <NfdAvatar nfd={nfd} size={64} className="rounded-xl" />
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              {nfd?.name || formatShortAddress(activeAddress)}
-            </h2>
-            {nfd?.name && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                {formatShortAddress(activeAddress)}
-              </p>
+            {isAdmin && adminName ? (
+              <>
+                <div className="flex items-center gap-2 mb-1">
+                  <User size={16} className="text-blue-500" />
+                  <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                    Organization Admin
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {adminName}
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                  {formatShortAddress(activeAddress)}
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {nfd?.name || formatShortAddress(activeAddress)}
+                </h2>
+                {nfd?.name && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                    {formatShortAddress(activeAddress)}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

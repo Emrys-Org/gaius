@@ -12,11 +12,15 @@ import { TextWithCopy } from './components/TextWithCopy'
 import { LoyaltyProgramDashboard } from './components/LoyaltyProgramDashboard'
 import { LoyaltyProgramMinter } from './components/LoyaltyProgramMinter'
 import { LoyaltyPassSender } from './components/LoyaltyPassSender'
+import { PricingPlans } from './components/PricingPlans'
 import { HomePage } from './components/HomePage'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { useState, useEffect, useCallback } from 'react'
 import { getAlgodClient } from './utils/algod'
 import { getIPFSGatewayURL } from './utils/pinata'
+import { Check, User } from 'lucide-react'
+import { OrganizationAuth } from './components/OrganizationAuth'
+import { supabase } from './utils/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const walletManager = new WalletManager({
@@ -41,14 +45,67 @@ interface LoyaltyProgram {
 }
 
 function AppContent() {
-  const { activeAddress, activeWallet } = useWallet()
-  const { activeNetwork, setActiveNetwork } = useNetwork()
-  const [currentPage, setCurrentPage] = useState<
-    'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass'
-  >('home')
-  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<LoyaltyProgram[]>([])
-  const [isLoadingPrograms, setIsLoadingPrograms] = useState(false)
-  const [isPageTransitioning, setIsPageTransitioning] = useState(false)
+  const { activeAddress, activeWallet } = useWallet();
+  const { activeNetwork, setActiveNetwork } = useNetwork();
+  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth'>('home');
+  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [session, setSession] = useState<any>(null);
+  const [adminName, setAdminName] = useState<string | null>(null);
+
+  // Listen for auth changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        fetchAdminName();
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchAdminName();
+      } else {
+        setAdminName(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch admin name from Supabase
+  const fetchAdminName = async () => {
+    if (!activeAddress) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('organization_admins')
+        .select('full_name')
+        .eq('wallet_address', activeAddress)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching admin name:', error);
+        return;
+      }
+      
+      if (data) {
+        setAdminName(data.full_name);
+      }
+    } catch (error) {
+      console.error('Error fetching admin name:', error);
+    }
+  };
+
+  // Redirect to auth if trying to access protected pages without being authenticated
+  useEffect(() => {
+    if (!session && (currentPage === 'loyalty-dashboard' || currentPage === 'create-program' || currentPage === 'send-pass')) {
+      setCurrentPage('auth');
+    }
+  }, [session, currentPage]);
 
   // Fetch user loyalty programs
   const fetchUserLoyaltyPrograms = useCallback(async () => {
@@ -136,20 +193,24 @@ function AppContent() {
     if (activeAddress && currentPage === 'send-pass') {
       fetchUserLoyaltyPrograms()
     }
-  }, [activeAddress, currentPage, fetchUserLoyaltyPrograms])
+  }, [activeAddress, currentPage, activeNetwork]);
+
+  // Effect to fetch admin name when address changes
+  useEffect(() => {
+    if (activeAddress && session) {
+      fetchAdminName();
+    }
+  }, [activeAddress, session]);
 
   // Redirect to home if trying to access dashboard without wallet
-  const handleNavigation = async (
-    page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass',
-  ) => {
-    if (
-      (page === 'loyalty-dashboard' ||
-        page === 'create-program' ||
-        page === 'send-pass') &&
-      !activeAddress
-    ) {
-      // Don't navigate to dashboard or create program without wallet connection
-      return
+  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth') => {
+    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !activeAddress) {
+      return;
+    }
+    
+    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !session) {
+      setCurrentPage('auth');
+      return;
     }
 
     setIsPageTransitioning(true)
@@ -197,6 +258,13 @@ function AppContent() {
     ease: 'anticipate',
     duration: 0.3
   }
+
+  // Handle subscription completion
+  const handleSubscriptionComplete = (plan: string) => {
+    setSubscriptionPlan(plan);
+    // You could store this in localStorage or a database in a real application
+    console.log(`Subscription completed for plan: ${plan}`);
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
@@ -283,6 +351,21 @@ function AppContent() {
                   Send Pass
                   {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
                 </motion.button>
+                </button>
+                <button 
+                  onClick={() => handleNavigation('pricing')} 
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'pricing' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                >
+                  Pricing
+                </button>
+                {!session && (
+                  <button 
+                    onClick={() => handleNavigation('auth')} 
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'auth' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                  >
+                    Sign In / Sign Up
+                  </button>
+                )}
               </nav>
             </motion.div>
             
