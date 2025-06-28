@@ -18,9 +18,10 @@ import { useState, useEffect } from 'react'
 import algosdk from 'algosdk'
 import { getAlgodClient } from './utils/algod'
 import { getIPFSGatewayURL } from './utils/pinata'
-import { Check, User } from 'lucide-react'
+import { Check, User, LogOut } from 'lucide-react'
 import { OrganizationAuth } from './components/OrganizationAuth'
 import { supabase } from './utils/supabase'
+import { checkSubscription, SubscriptionDetails } from './utils/subscription'
 
 const walletManager = new WalletManager({
   wallets: [
@@ -41,16 +42,20 @@ function AppContent() {
   const { activeNetwork, setActiveNetwork } = useNetwork();
   const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth'>('home');
   const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
-  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionDetails | null>(null);
   const [session, setSession] = useState<any>(null);
   const [adminName, setAdminName] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(false);
 
   // Listen for auth changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) {
+      if (session && activeAddress) {
         fetchAdminName();
+        // Immediate redirect to dashboard if signed in
+        setCurrentPage('loyalty-dashboard');
       }
     });
 
@@ -58,15 +63,19 @@ function AppContent() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) {
+      if (session && activeAddress) {
         fetchAdminName();
-      } else {
+        // Immediate redirect to dashboard if signed in
+        setCurrentPage('loyalty-dashboard');
+      } else if (!session) {
         setAdminName(null);
+        // Redirect to home if signed out
+        setCurrentPage('home');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [activeAddress]);
 
   // Fetch admin name from Supabase
   const fetchAdminName = async () => {
@@ -91,6 +100,30 @@ function AppContent() {
       console.error('Error fetching admin name:', error);
     }
   };
+
+  // Fetch subscription status from blockchain when address or network changes
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!activeAddress) {
+        setSubscription(null);
+        return;
+      }
+      
+      setIsLoadingSubscription(true);
+      
+      try {
+        const subscriptionDetails = await checkSubscription(activeAddress);
+        setSubscription(subscriptionDetails);
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+        setSubscription(null);
+      } finally {
+        setIsLoadingSubscription(false);
+      }
+    };
+    
+    fetchSubscription();
+  }, [activeAddress, activeNetwork]);
 
   // Redirect to auth if trying to access protected pages without being authenticated
   useEffect(() => {
@@ -212,63 +245,67 @@ function AppContent() {
 
   // Handle subscription completion
   const handleSubscriptionComplete = (plan: string) => {
-    setSubscriptionPlan(plan);
-    // You could store this in localStorage or a database in a real application
-    console.log(`Subscription completed for plan: ${plan}`);
+    // Refresh subscription data from blockchain
+    if (activeAddress) {
+      checkSubscription(activeAddress).then(subscriptionDetails => {
+        setSubscription(subscriptionDetails);
+      });
+    }
+  };
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true);
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut({
+        scope: 'global' // Sign out from all devices
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Reset state
+      setAdminName(null);
+      setSession(null);
+      
+      // Redirect to home page
+      setCurrentPage('home');
+      
+      // Show success message
+      alert('You have been signed out successfully');
+    } catch (error: any) {
+      console.error('Error signing out:', error);
+      alert(`Error signing out: ${error.message}`);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  // Get subscription plan name for display
+  const getSubscriptionPlanName = () => {
+    if (!subscription || !subscription.isActive) return null;
+    return subscription.plan;
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
-      {/* Header */}
-      <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
+          {/* Header */}
+          <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
                 Gaius
-              </span>
+                  </span>
               <nav className="hidden md:flex space-x-4">
                 <button 
                   onClick={() => handleNavigation('home')} 
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'home' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
                 >
                   Home
-                </button>
-                <button 
-                  onClick={() => handleNavigation('loyalty-dashboard')} 
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    !activeAddress 
-                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50' 
-                      : currentPage === 'loyalty-dashboard' 
-                        ? 'text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'
-                  }`}
-                  disabled={!activeAddress}
-                  title={!activeAddress ? 'Connect your wallet to access the organization dashboard' : ''}
-                >
-                  Organization Dashboard
-                  {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
-                </button>
-                <button 
-                  onClick={() => handleNavigation('send-pass')} 
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    !activeAddress 
-                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50' 
-                      : currentPage === 'send-pass' 
-                        ? 'text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'
-                  }`}
-                  disabled={!activeAddress}
-                  title={!activeAddress ? 'Connect your wallet to send loyalty passes' : ''}
-                >
-                  Send Pass
-                  {!activeAddress && <span className="ml-1 text-xs">🔒</span>}
-                </button>
-                <button 
-                  onClick={() => handleNavigation('pricing')} 
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'pricing' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
-                >
-                  Pricing
                 </button>
                 {!session && (
                   <button 
@@ -287,6 +324,23 @@ function AppContent() {
                   <User size={16} />
                   <span className="text-sm font-medium">{adminName}</span>
                 </div>
+              )}
+              
+              {/* Sign Out Button - only show when signed in */}
+              {session && (
+                <button
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  className="flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                  title="Sign out"
+                >
+                  {isSigningOut ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full"></div>
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
               )}
               
               {/* Network Selector - only show when wallet is connected */}
@@ -312,7 +366,9 @@ function AppContent() {
           <main>
             {currentPage === 'auth' ? (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <OrganizationAuth />
+                <OrganizationAuth 
+                  onAuthSuccess={() => handleNavigation('loyalty-dashboard')} 
+                />
               </div>
             ) : currentPage === 'home' ? (
               <HomePage onNavigate={handleNavigation} />
@@ -326,7 +382,7 @@ function AppContent() {
                     ← Back to Home
                   </button>
                 </div>
-            <WalletInfo />
+            <WalletInfo subscriptionPlan={getSubscriptionPlanName()} />
                 <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
                   <div className="flex justify-between items-center mb-8">
                     <h2 className="text-3xl font-bold">Create Your Loyalty Program</h2>
@@ -354,7 +410,7 @@ function AppContent() {
                     ← Back to Home
                   </button>
                 </div>
-                <WalletInfo />
+                <WalletInfo subscriptionPlan={getSubscriptionPlanName()} />
                 <div className="mt-8">
                   <LoyaltyPassSender 
                     loyaltyPrograms={userLoyaltyPrograms}
@@ -375,35 +431,23 @@ function AppContent() {
                     ← Back to Home
                   </button>
                 </div>
-                {activeAddress && subscriptionPlan ? (
-                  <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
-                    <div className="text-center py-8">
-                      <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full mb-4">
-                        <Check size={32} />
-                    </div>
-                      <h2 className="text-2xl font-bold mb-2">Active Subscription</h2>
-                      <p className="text-gray-600 dark:text-gray-400">
-                        You're currently subscribed to the {subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1)} plan.
-                      </p>
-                      <div className="mt-6">
-                        <button
-                          onClick={() => handleNavigation('loyalty-dashboard')}
-                          className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                          Go to Dashboard
-                        </button>
-                    </div>
-                    </div>
+                {isLoadingSubscription ? (
+                  <div className="text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400">Loading subscription details...</p>
                   </div>
                 ) : (
-                  <PricingPlans onSubscriptionComplete={handleSubscriptionComplete} />
+                  <PricingPlans 
+                    onSubscriptionComplete={handleSubscriptionComplete} 
+                    currentSubscription={subscription}
+                  />
                 )}
                 </div>
             ) : (
               <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <WalletInfo />
+                <WalletInfo subscriptionPlan={getSubscriptionPlanName()} />
                 <LoyaltyProgramDashboard 
-                  subscriptionPlan={subscriptionPlan}
+                  subscriptionPlan={getSubscriptionPlanName()}
                   onNavigateToPricing={() => handleNavigation('pricing')}
                 />
               </div>

@@ -3,8 +3,9 @@ import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import algosdk from 'algosdk';
 import { getAlgodClient, getNetworkConfig } from '../utils/algod';
 import { pinFileToIPFS } from '../utils/pinata';
-import { ChevronLeft, ChevronRight, Upload, X, Plus, Trash2, Eye, Palette, Award, Building2, QrCode } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Upload, X, Plus, Trash2, Eye, Palette, Award, Building2, QrCode, AlertTriangle } from 'lucide-react';
 import * as QRCode from 'qrcode';
+import { checkSubscription, hasReachedProgramLimit, SUBSCRIPTION_PLANS } from '../utils/subscription';
 
 interface LoyaltyProgramMinterProps {
   onLoyaltyProgramMinted?: () => void;
@@ -56,6 +57,9 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
   const [result, setResult] = useState<{ success: boolean; message: string; assetId?: number }>(); 
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
+  const [userProgramCount, setUserProgramCount] = useState(0);
 
   const [formData, setFormData] = useState<LoyaltyProgramData>({
     // Step 1: Basics
@@ -79,6 +83,78 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
     accentColor: '#F59E0B',
     cardStyle: 'modern'
   });
+
+  // Fetch user's subscription and program count
+  useEffect(() => {
+    const fetchSubscriptionAndPrograms = async () => {
+      if (!activeAddress) return;
+      
+      setIsCheckingSubscription(true);
+      
+      try {
+        // Check subscription status
+        const subscriptionDetails = await checkSubscription(activeAddress);
+        setSubscription(subscriptionDetails);
+        
+        // Count user's existing programs
+        const networkType = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+        const algodClient = getAlgodClient(networkType);
+        
+        const accountInfo = await algodClient.accountInformation(activeAddress).do();
+        const assets = accountInfo.assets || [];
+        
+        // Count loyalty programs (simplified approach)
+        let programCount = 0;
+        
+        for (const asset of assets) {
+          if (typeof asset.amount === 'bigint' ? asset.amount === 0n : asset.amount === 0) continue;
+          
+          try {
+            const assetInfo = await algodClient.getAssetByID(asset.assetId).do();
+            const params = assetInfo.params;
+            
+            const totalSupply = typeof params.total === 'bigint' ? Number(params.total) : Number(params.total);
+            const isLoyaltyProgram = totalSupply === 1 && params.decimals === 0;
+            
+            if (isLoyaltyProgram) {
+              programCount++;
+            }
+          } catch (error) {
+            console.error(`Error fetching asset ${asset.assetId} info:`, error);
+          }
+        }
+        
+        setUserProgramCount(programCount);
+      } catch (error) {
+        console.error('Error checking subscription:', error);
+      } finally {
+        setIsCheckingSubscription(false);
+      }
+    };
+    
+    fetchSubscriptionAndPrograms();
+  }, [activeAddress, activeNetwork]);
+
+  // Check if user has reached program limit
+  const hasReachedLimit = () => {
+    if (!subscription || !subscription.isActive) return true;
+    
+    const planDetails = SUBSCRIPTION_PLANS[subscription.plan as keyof typeof SUBSCRIPTION_PLANS];
+    if (!planDetails) return true;
+    
+    return userProgramCount >= planDetails.programLimit;
+  };
+
+  // Get remaining program slots
+  const getRemainingSlots = () => {
+    if (!subscription || !subscription.isActive) return 0;
+    
+    const planDetails = SUBSCRIPTION_PLANS[subscription.plan as keyof typeof SUBSCRIPTION_PLANS];
+    if (!planDetails) return 0;
+    
+    if (planDetails.programLimit === Infinity) return Infinity;
+    return Math.max(0, planDetails.programLimit - userProgramCount);
+  };
 
   // Get network-specific configuration
   const getNetworkInfo = () => {
@@ -217,6 +293,15 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
   const createLoyaltyProgram = async () => {
     if (!activeAddress || !signTransactions) {
       setResult({ success: false, message: 'Please connect your wallet first' });
+      return;
+    }
+
+    // Check subscription status
+    if (hasReachedLimit()) {
+      setResult({ 
+        success: false, 
+        message: 'You have reached the maximum number of loyalty programs for your subscription plan. Please upgrade your plan to create more programs.' 
+      });
       return;
     }
 
@@ -793,10 +878,75 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
     </div>
   );
 
+  // Add subscription warning component
+  const renderSubscriptionWarning = () => {
+    if (isCheckingSubscription) {
+      return (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+          <p className="text-blue-800 dark:text-blue-300">Checking subscription status...</p>
+        </div>
+      );
+    }
+
+    if (!subscription || !subscription.isActive) {
+      return (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-yellow-800 dark:text-yellow-300">No active subscription</p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                You don't have an active subscription plan. Your ability to create loyalty programs may be limited.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasReachedLimit()) {
+      return (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-red-800 dark:text-red-300">Program limit reached</p>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+                You've reached the maximum number of loyalty programs ({userProgramCount}) for your {subscription.plan} plan. 
+                Please upgrade your subscription to create more programs.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const remainingSlots = getRemainingSlots();
+    return (
+      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <Award className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="font-medium text-green-800 dark:text-green-300">{subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan active</p>
+            <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+              {remainingSlots === Infinity 
+                ? "You can create unlimited loyalty programs with your current plan." 
+                : `You can create ${remainingSlots} more loyalty program${remainingSlots !== 1 ? 's' : ''} with your current plan.`}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Form Section */}
       <div className="lg:col-span-2">
+        {/* Subscription Status */}
+        {renderSubscriptionWarning()}
+        
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">

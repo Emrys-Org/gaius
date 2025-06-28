@@ -3,7 +3,11 @@ import { supabase } from '../utils/supabase';
 import { OrganizationSignup } from './OrganizationSignup';
 import { OrganizationSignin } from './OrganizationSignin';
 
-export function OrganizationAuth() {
+interface OrganizationAuthProps {
+  onAuthSuccess?: () => void;
+}
+
+export function OrganizationAuth({ onAuthSuccess }: OrganizationAuthProps = {}) {
   const [isSignup, setIsSignup] = useState(true);
   const [session, setSession] = useState<any>(null);
 
@@ -36,7 +40,10 @@ export function OrganizationAuth() {
         </p>
       </div>
 
-      {isSignup ? <OrganizationSignup /> : <OrganizationSignin />}
+      {isSignup ? 
+        <OrganizationSignup onSignUpSuccess={onAuthSuccess} /> : 
+        <OrganizationSignin onSignInSuccess={onAuthSuccess} />
+      }
 
       <div className="mt-6 text-center">
         <button
