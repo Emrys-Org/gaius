@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import algosdk from 'algosdk';
 import { getAlgodClient, getNetworkConfig } from '../utils/algod';
-import { Send, CreditCard, User, Wallet, CheckCircle, AlertCircle, Copy, QrCode } from 'lucide-react';
+import { Send, CreditCard, User, Wallet, CheckCircle, AlertCircle, Copy, QrCode, AlertTriangle } from 'lucide-react';
 import * as QRCode from 'qrcode';
+import { checkSubscription, hasReachedMemberLimit, SUBSCRIPTION_PLANS } from '../utils/subscription';
 
 interface LoyaltyProgram {
   id: number;
@@ -42,6 +43,9 @@ export function LoyaltyPassSender({ loyaltyPrograms, onPassSent }: LoyaltyPassSe
   const [result, setResult] = useState<{ success: boolean; message: string; assetId?: number } | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
+  const [memberCount, setMemberCount] = useState(0);
 
   // Get network info
   const getNetworkInfo = () => {
@@ -89,6 +93,69 @@ export function LoyaltyPassSender({ loyaltyPrograms, onPassSent }: LoyaltyPassSe
     }
   };
 
+  // Fetch user's subscription and member count
+  useEffect(() => {
+    const fetchSubscriptionAndMembers = async () => {
+      if (!activeAddress) return;
+      
+      setIsCheckingSubscription(true);
+      
+      try {
+        // Check subscription status
+        const subscriptionDetails = await checkSubscription(activeAddress);
+        setSubscription(subscriptionDetails);
+        
+        // For a real app, you would fetch the actual member count from your database
+        // This is a simplified approach for demonstration
+        const networkType = 'testnet'; // Default to testnet for safety
+        const algodClient = getAlgodClient(networkType);
+        
+        // Get account information
+        const accountInfo = await algodClient.accountInformation(activeAddress).do();
+        
+        // Count the number of opt-ins to loyalty passes as a proxy for member count
+        // In a real app, you would use a more accurate method
+        let count = 0;
+        
+        // This is just a placeholder - in a real app you would track members in a database
+        // and query that database for the actual count
+        if (loyaltyPrograms.length > 0) {
+          // Simulate member count based on program count for demo purposes
+          count = Math.floor(Math.random() * 20) * loyaltyPrograms.length;
+        }
+        
+        setMemberCount(count);
+      } catch (error) {
+        console.error('Error checking subscription:', error);
+      } finally {
+        setIsCheckingSubscription(false);
+      }
+    };
+    
+    fetchSubscriptionAndMembers();
+  }, [activeAddress, loyaltyPrograms.length]);
+
+  // Check if user has reached member limit
+  const hasReachedLimit = () => {
+    if (!subscription || !subscription.isActive) return true;
+    
+    const planDetails = SUBSCRIPTION_PLANS[subscription.plan as keyof typeof SUBSCRIPTION_PLANS];
+    if (!planDetails) return true;
+    
+    return memberCount >= planDetails.memberLimit;
+  };
+
+  // Get remaining member slots
+  const getRemainingSlots = () => {
+    if (!subscription || !subscription.isActive) return 0;
+    
+    const planDetails = SUBSCRIPTION_PLANS[subscription.plan as keyof typeof SUBSCRIPTION_PLANS];
+    if (!planDetails) return 0;
+    
+    if (planDetails.memberLimit === Infinity) return Infinity;
+    return Math.max(0, planDetails.memberLimit - memberCount);
+  };
+
   // Send loyalty pass
   const sendLoyaltyPass = async () => {
     if (!activeAddress || !signTransactions) {
@@ -114,6 +181,15 @@ export function LoyaltyPassSender({ loyaltyPrograms, onPassSent }: LoyaltyPassSe
     const selectedProgram = loyaltyPrograms.find(p => p.id === selectedProgramId);
     if (!selectedProgram) {
       setResult({ success: false, message: 'Please select a loyalty program' });
+      return;
+    }
+
+    // Check subscription status
+    if (hasReachedLimit()) {
+      setResult({ 
+        success: false, 
+        message: 'You have reached the maximum number of members for your subscription plan. Please upgrade your plan to add more members.' 
+      });
       return;
     }
 
@@ -261,6 +337,71 @@ export function LoyaltyPassSender({ loyaltyPrograms, onPassSent }: LoyaltyPassSe
     navigator.clipboard.writeText(text);
   };
 
+  // Render subscription warning component
+  const renderSubscriptionWarning = () => {
+    if (isCheckingSubscription) {
+      return (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+          <p className="text-blue-800 dark:text-blue-300">Checking subscription status...</p>
+        </div>
+      );
+    }
+
+    if (!subscription || !subscription.isActive) {
+      return (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-yellow-800 dark:text-yellow-300">No active subscription</p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                You don't have an active subscription plan. Your ability to add members may be limited.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasReachedLimit()) {
+      return (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-red-800 dark:text-red-300">Member limit reached</p>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+                You've reached the maximum number of members ({memberCount}) for your {subscription.plan} plan. 
+                Please upgrade your subscription to add more members.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const remainingSlots = getRemainingSlots();
+    return (
+      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <svg className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <div>
+            <p className="font-medium text-green-800 dark:text-green-300">{subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan active</p>
+            <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+              {remainingSlots === Infinity 
+                ? "You can add unlimited members with your current plan." 
+                : `You can add ${remainingSlots} more member${remainingSlots !== 1 ? 's' : ''} with your current plan.`}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loyaltyPrograms.length === 0) {
     return (
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
@@ -405,10 +546,13 @@ export function LoyaltyPassSender({ loyaltyPrograms, onPassSent }: LoyaltyPassSe
             </div>
           </div>
 
+          {/* Subscription Status */}
+          {renderSubscriptionWarning()}
+
           {/* Send Button */}
           <button
             onClick={sendLoyaltyPass}
-            disabled={isLoading || !recipientAddress || !memberInfo.name || !isValidAlgorandAddress(recipientAddress)}
+            disabled={isLoading || !recipientAddress || !memberInfo.name || !isValidAlgorandAddress(recipientAddress) || hasReachedLimit()}
             className="w-full px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? (

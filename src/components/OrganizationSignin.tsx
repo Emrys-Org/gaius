@@ -8,7 +8,11 @@ interface SigninFormData {
   password: string;
 }
 
-export function OrganizationSignin() {
+interface OrganizationSigninProps {
+  onSignInSuccess?: () => void;
+}
+
+export function OrganizationSignin({ onSignInSuccess }: OrganizationSigninProps = {}) {
   const { activeAddress } = useWallet();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +64,13 @@ export function OrganizationSignin() {
         password: ''
       });
 
-      // You can add additional logic here, such as redirecting to a dashboard
+      // Redirect to dashboard after successful sign-in
+      if (onSignInSuccess) {
+        onSignInSuccess(); // Immediate redirect, no delay
+      } else {
+        // If no callback provided, redirect using window.location immediately
+        window.location.href = '/';
+      }
     } catch (error: any) {
       setError(error.message || 'An error occurred during sign in');
     } finally {

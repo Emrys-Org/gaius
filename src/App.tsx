@@ -18,10 +18,11 @@ import { LoadingSpinner } from './components/LoadingSpinner'
 import { useState, useEffect, useCallback } from 'react'
 import { getAlgodClient } from './utils/algod'
 import { getIPFSGatewayURL } from './utils/pinata'
-import { Check, User } from 'lucide-react'
+import { Check, User, LogOut } from 'lucide-react'
 import { OrganizationAuth } from './components/OrganizationAuth'
 import { supabase } from './utils/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
+import { checkSubscription, SubscriptionDetails } from './utils/subscription'
 
 const walletManager = new WalletManager({
   wallets: [
@@ -108,7 +109,31 @@ function AppContent() {
     } catch (error) {
       console.error('Error fetching admin name:', error)
     }
-  }
+  };
+
+  // Fetch subscription status from blockchain when address or network changes
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!activeAddress) {
+        setSubscription(null);
+        return;
+      }
+      
+      setIsLoadingSubscription(true);
+      
+      try {
+        const subscriptionDetails = await checkSubscription(activeAddress);
+        setSubscription(subscriptionDetails);
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+        setSubscription(null);
+      } finally {
+        setIsLoadingSubscription(false);
+      }
+    };
+    
+    fetchSubscription();
+  }, [activeAddress, activeNetwork]);
 
   // Redirect to auth if trying to access protected pages without being authenticated
   useEffect(() => {
@@ -294,6 +319,50 @@ function AppContent() {
 
   // Handle subscription completion
   const handleSubscriptionComplete = (plan: string) => {
+    // Refresh subscription data from blockchain
+    if (activeAddress) {
+      checkSubscription(activeAddress).then(subscriptionDetails => {
+        setSubscription(subscriptionDetails);
+      });
+    }
+  };
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true);
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut({
+        scope: 'global' // Sign out from all devices
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Reset state
+      setAdminName(null);
+      setSession(null);
+      
+      // Redirect to home page
+      setCurrentPage('home');
+      
+      // Show success message
+      alert('You have been signed out successfully');
+    } catch (error: any) {
+      console.error('Error signing out:', error);
+      alert(`Error signing out: ${error.message}`);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  // Get subscription plan name for display
+  const getSubscriptionPlanName = () => {
+    if (!subscription || !subscription.isActive) return null;
+    return subscription.plan;
+  };
     setSubscriptionPlan(plan)
     // You could store this in localStorage or a database in a real application
     console.log(`Subscription completed for plan: ${plan}`)
@@ -407,6 +476,33 @@ function AppContent() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3, duration: 0.6 }}
             >
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Admin Name Display */}
+              {session && adminName && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full">
+                  <User size={16} />
+                  <span className="text-sm font-medium">{adminName}</span>
+                </div>
+              )}
+              
+              {/* Sign Out Button - only show when signed in */}
+              {session && (
+                <button
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  className="flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                  title="Sign out"
+                >
+                  {isSigningOut ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full"></div>
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
+              )}
+              
               {/* Network Selector - only show when wallet is connected */}
               {activeAddress && (
                 <motion.div

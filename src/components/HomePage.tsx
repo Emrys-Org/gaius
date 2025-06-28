@@ -428,7 +428,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
                       d="M5 13l4 4L19 7"
                     ></path>
                   </svg>
-                  <span>Up to 100 members</span>
+                  <span>Up to 250 members</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <svg
@@ -444,7 +444,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
                       d="M5 13l4 4L19 7"
                     ></path>
                   </svg>
-                  <span>3 loyalty programs</span>
+                  <span>5 loyalty programs</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <svg
@@ -499,7 +499,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
                       d="M5 13l4 4L19 7"
                     ></path>
                   </svg>
-                  <span>Up to 1,000 members</span>
+                  <span>Up to 2,500 members</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <svg
@@ -515,7 +515,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
                       d="M5 13l4 4L19 7"
                     ></path>
                   </svg>
-                  <span>10 loyalty programs</span>
+                  <span>20 loyalty programs</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <svg

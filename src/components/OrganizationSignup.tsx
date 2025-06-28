@@ -12,7 +12,11 @@ interface SignupFormData {
   securityAnswer: string;
 }
 
-export function OrganizationSignup() {
+interface OrganizationSignupProps {
+  onSignUpSuccess?: () => void;
+}
+
+export function OrganizationSignup({ onSignUpSuccess }: OrganizationSignupProps = {}) {
   const { activeAddress } = useWallet();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -131,6 +135,14 @@ export function OrganizationSignup() {
         securityQuestion: '',
         securityAnswer: ''
       });
+
+      // Redirect to dashboard after successful sign-up
+      if (onSignUpSuccess) {
+        onSignUpSuccess(); // Immediate redirect, no delay
+      } else {
+        // If no callback provided, redirect using window.location immediately
+        window.location.href = '/';
+      }
     } catch (error: any) {
       setError(error.message || 'An error occurred during signup');
     } finally {

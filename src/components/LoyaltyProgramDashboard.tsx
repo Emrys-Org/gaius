@@ -15,10 +15,12 @@ import {
   Plus, X, ChevronLeft, Video, Music, FileText, Box,
   Image, File, ExternalLink, QrCode, CreditCard,
   Download, ArrowRight, MessageSquare, Eye, Calendar, MapPin, 
-  Palette, Wallet, Star, Settings, User, Building2
+  Palette, Wallet, Star, Settings, User, Building2, LogOut,
+  AlertTriangle, AlertCircle
 } from 'lucide-react';
 import * as QRCode from 'qrcode';
 import { MemberCard } from './MemberCard';
+import { hasReachedMemberLimit, hasReachedProgramLimit, SUBSCRIPTION_PLANS } from '../utils/subscription';
 
 interface LoyaltyProgramInfo {
   id: number;
@@ -1550,50 +1552,17 @@ export function LoyaltyProgramDashboard({
     const totalPoints = members.reduce((sum, member) => sum + member.totalPoints, 0);
     const averagePoints = totalMembers > 0 ? Math.round(totalPoints / totalMembers) : 0;
 
+    // Get subscription limits
+    const planDetails = subscriptionPlan ? SUBSCRIPTION_PLANS[subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS] : null;
+    const memberLimit = planDetails?.memberLimit || 0;
+    const programLimit = planDetails?.programLimit || 0;
+    
+    // Calculate usage percentages
+    const memberUsagePercent = memberLimit ? Math.min(100, Math.round((totalMembers / memberLimit) * 100)) : 100;
+    const programUsagePercent = programLimit ? Math.min(100, Math.round((totalPrograms / programLimit) * 100)) : 100;
+
     return (
       <div className="space-y-8">
-        {/* Admin Information Card */}
-        {adminInfo && (
-          <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                <User size={24} className="text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <span>Organization Admin</span>
-                </h3>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Name</p>
-                    <p className="font-medium text-gray-900 dark:text-white">{adminInfo.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
-                    <p className="font-medium text-gray-900 dark:text-white">{adminInfo.email}</p>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Wallet Address</p>
-                  <p className="font-medium text-gray-900 dark:text-white font-mono text-sm">{activeAddress}</p>
-                </div>
-                <div className="mt-4 flex items-center gap-2">
-                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    activeNetwork === 'mainnet' 
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
-                  }`}>
-                    {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
-                  </div>
-                  <div className="px-3 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300 rounded-full text-sm font-medium">
-                    {subscriptionPlan ? `${subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1)} Plan` : 'Free Plan'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
@@ -1605,9 +1574,23 @@ export function LoyaltyProgramDashboard({
               <Award className="h-8 w-8 text-blue-200" />
             </div>
             <div className="mt-2">
-              <p className="text-blue-100 text-xs">
-                {userLoyaltyPrograms.length > 0 ? '+2 this month' : 'Create your first program'}
-              </p>
+              {planDetails ? (
+                <div className="w-full bg-blue-200/30 h-2 rounded-full mt-2">
+                  <div 
+                    className="bg-blue-100 h-2 rounded-full" 
+                    style={{ width: `${programUsagePercent}%` }}
+                  ></div>
+                </div>
+              ) : (
+                <p className="text-blue-100 text-xs">
+                  {userLoyaltyPrograms.length > 0 ? '+2 this month' : 'Create your first program'}
+                </p>
+              )}
+              {planDetails && (
+                <p className="text-blue-100 text-xs mt-1">
+                  {userLoyaltyPrograms.length} of {planDetails.programLimit === Infinity ? 'Unlimited' : planDetails.programLimit} programs
+                </p>
+              )}
             </div>
           </div>
           
@@ -1620,7 +1603,21 @@ export function LoyaltyProgramDashboard({
               <Users className="h-8 w-8 text-green-200" />
             </div>
             <div className="mt-2">
-              <p className="text-green-100 text-xs">+{Math.floor(members.length * 0.2)} this week</p>
+              {planDetails ? (
+                <div className="w-full bg-green-200/30 h-2 rounded-full mt-2">
+                  <div 
+                    className="bg-green-100 h-2 rounded-full" 
+                    style={{ width: `${memberUsagePercent}%` }}
+                  ></div>
+                </div>
+              ) : (
+                <p className="text-green-100 text-xs">+{Math.floor(members.length * 0.2)} this week</p>
+              )}
+              {planDetails && (
+                <p className="text-green-100 text-xs mt-1">
+                  {members.length} of {planDetails.memberLimit === Infinity ? 'Unlimited' : planDetails.memberLimit} members
+                </p>
+              )}
             </div>
           </div>
           
@@ -1650,6 +1647,69 @@ export function LoyaltyProgramDashboard({
             </div>
           </div>
         </div>
+
+        {/* Subscription Warning */}
+        {!subscriptionPlan && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6 text-yellow-800 dark:text-yellow-300">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-800 rounded-full">
+                <AlertTriangle size={24} className="text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">No Active Subscription</h3>
+                <p className="mb-4">You don't have an active subscription plan. Subscribe to unlock more features and increase your program limits.</p>
+                <button
+                  onClick={onNavigateToPricing}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                >
+                  View Pricing Plans
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Program Limit Warning */}
+        {subscriptionPlan && planDetails && userLoyaltyPrograms.length >= planDetails.programLimit && planDetails.programLimit !== Infinity && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-red-800 dark:text-red-300">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-red-100 dark:bg-red-800 rounded-full">
+                <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Program Limit Reached</h3>
+                <p className="mb-4">You've reached the maximum number of loyalty programs for your current subscription plan.</p>
+                <button
+                  onClick={onNavigateToPricing}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Member Limit Warning */}
+        {subscriptionPlan && planDetails && members.length >= planDetails.memberLimit && planDetails.memberLimit !== Infinity && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-red-800 dark:text-red-300">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-red-100 dark:bg-red-800 rounded-full">
+                <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Member Limit Reached</h3>
+                <p className="mb-4">You've reached the maximum number of members for your current subscription plan.</p>
+                <button
+                  onClick={onNavigateToPricing}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recent Programs and Activity Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2616,15 +2676,15 @@ export function LoyaltyProgramDashboard({
       {showLoyaltyPassModal && selectedMember && renderLoyaltyPassModal()}
       
       {/* Message Center Modal */}
-      {showMessageCenter && (
+      {showMessageCenter && selectedMemberForMessage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
             <MessageCenter
-              member={selectedMemberForMessage || undefined}
+              member={selectedMemberForMessage}
               isAdmin={true}
               onClose={closeMessageCenter}
-              recipientAddress={selectedMemberForMessage?.address}
-              passId={selectedMemberForMessage?.assetIds[0]}
+              recipientAddress={selectedMemberForMessage.address}
+              passId={selectedMemberForMessage.assetIds[0]}
             />
           </div>
         </div>
