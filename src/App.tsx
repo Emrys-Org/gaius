@@ -18,7 +18,9 @@ import { useState, useEffect } from 'react'
 import algosdk from 'algosdk'
 import { getAlgodClient } from './utils/algod'
 import { getIPFSGatewayURL } from './utils/pinata'
-import { Check } from 'lucide-react'
+import { Check, User } from 'lucide-react'
+import { OrganizationAuth } from './components/OrganizationAuth'
+import { supabase } from './utils/supabase'
 
 const walletManager = new WalletManager({
   wallets: [
@@ -37,9 +39,65 @@ const walletManager = new WalletManager({
 function AppContent() {
   const { activeAddress, activeWallet } = useWallet();
   const { activeNetwork, setActiveNetwork } = useNetwork();
-  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth'>('home');
   const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<any[]>([]);
   const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [session, setSession] = useState<any>(null);
+  const [adminName, setAdminName] = useState<string | null>(null);
+
+  // Listen for auth changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        fetchAdminName();
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchAdminName();
+      } else {
+        setAdminName(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch admin name from Supabase
+  const fetchAdminName = async () => {
+    if (!activeAddress) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('organization_admins')
+        .select('full_name')
+        .eq('wallet_address', activeAddress)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching admin name:', error);
+        return;
+      }
+      
+      if (data) {
+        setAdminName(data.full_name);
+      }
+    } catch (error) {
+      console.error('Error fetching admin name:', error);
+    }
+  };
+
+  // Redirect to auth if trying to access protected pages without being authenticated
+  useEffect(() => {
+    if (!session && (currentPage === 'loyalty-dashboard' || currentPage === 'create-program' || currentPage === 'send-pass')) {
+      setCurrentPage('auth');
+    }
+  }, [session, currentPage]);
 
   // Fetch user loyalty programs
   const fetchUserLoyaltyPrograms = async () => {
@@ -110,12 +168,24 @@ function AppContent() {
     }
   }, [activeAddress, currentPage, activeNetwork]);
 
+  // Effect to fetch admin name when address changes
+  useEffect(() => {
+    if (activeAddress && session) {
+      fetchAdminName();
+    }
+  }, [activeAddress, session]);
+
   // Redirect to home if trying to access dashboard without wallet
-  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing') => {
+  const handleNavigation = (page: 'home' | 'loyalty-dashboard' | 'create-program' | 'send-pass' | 'pricing' | 'auth') => {
     if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !activeAddress) {
-      // Don't navigate to dashboard or create program without wallet connection
       return;
     }
+    
+    if ((page === 'loyalty-dashboard' || page === 'create-program' || page === 'send-pass') && !session) {
+      setCurrentPage('auth');
+      return;
+    }
+    
     setCurrentPage(page);
   };
 
@@ -148,15 +218,15 @@ function AppContent() {
   };
 
   return (
-        <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
-          {/* Header */}
-          <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center h-16">
+    <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
+      {/* Header */}
+      <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
                 Gaius
-                  </span>
+              </span>
               <nav className="hidden md:flex space-x-4">
                 <button 
                   onClick={() => handleNavigation('home')} 
@@ -200,9 +270,25 @@ function AppContent() {
                 >
                   Pricing
                 </button>
+                {!session && (
+                  <button 
+                    onClick={() => handleNavigation('auth')} 
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === 'auth' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                  >
+                    Sign In / Sign Up
+                  </button>
+                )}
               </nav>
             </div>
             <div className="flex items-center gap-4">
+              {/* Admin Name Display */}
+              {session && adminName && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full">
+                  <User size={16} />
+                  <span className="text-sm font-medium">{adminName}</span>
+                </div>
+              )}
+              
               {/* Network Selector - only show when wallet is connected */}
               {activeAddress && (
                 <div className="flex items-center gap-2">
@@ -223,8 +309,12 @@ function AppContent() {
             </div>
           </header>
           {/* Main content area */}
-                <main>
-            {currentPage === 'home' ? (
+          <main>
+            {currentPage === 'auth' ? (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                <OrganizationAuth />
+              </div>
+            ) : currentPage === 'home' ? (
               <HomePage onNavigate={handleNavigation} />
             ) : currentPage === 'create-program' ? (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

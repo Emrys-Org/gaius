@@ -9,12 +9,13 @@ import { LoyaltyPassSender } from './LoyaltyPassSender';
 import { LoyaltyPassTransfer } from './LoyaltyPassTransfer';
 import { XPManager } from './XPManager';
 import { fetchMemberXPTransactions, XPTransaction } from '../utils/xp';
+import { supabase } from '../utils/supabase';
 import { 
   BarChart3, Award, Users, Trophy, TrendingUp, Send, 
   Plus, X, ChevronLeft, Video, Music, FileText, Box,
   Image, File, ExternalLink, QrCode, CreditCard,
   Download, ArrowRight, MessageSquare, Eye, Calendar, MapPin, 
-  Palette, Wallet, Star, Settings
+  Palette, Wallet, Star, Settings, User, Building2
 } from 'lucide-react';
 import * as QRCode from 'qrcode';
 import { MemberCard } from './MemberCard';
@@ -157,10 +158,42 @@ export function LoyaltyProgramDashboard({
   const [selectedMemberForMessage, setSelectedMemberForMessage] = useState<Member | null>(null);
   const [recipientAddress, setRecipientAddress] = useState('');
   const [selectedProgramId, setSelectedProgramId] = useState(0);
+  const [adminInfo, setAdminInfo] = useState<{name: string; email: string} | null>(null);
   
   // Search state variables
   const [programSearchQuery, setProgramSearchQuery] = useState('');
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
+
+  // Fetch admin info when component mounts
+  useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (!activeAddress) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('organization_admins')
+          .select('full_name, email')
+          .eq('wallet_address', activeAddress)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching admin info:', error);
+          return;
+        }
+        
+        if (data) {
+          setAdminInfo({
+            name: data.full_name,
+            email: data.email
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching admin info:', error);
+      }
+    };
+    
+    fetchAdminInfo();
+  }, [activeAddress]);
 
   // Filtered programs and members based on search queries
   const filteredPrograms = useMemo(() => {
@@ -1511,13 +1544,57 @@ export function LoyaltyProgramDashboard({
 
   // Render different dashboard sections
   const renderOverview = () => {
-    // Calculate stats
-    const totalPoints = members.reduce((sum, m) => sum + m.totalPoints, 0);
-    const activePasses = members.filter(m => m.totalPoints > 0).length; // Members with points are considered active
-    
+    // Calculate statistics
+    const totalPrograms = userLoyaltyPrograms.length;
+    const totalMembers = members.length;
+    const totalPoints = members.reduce((sum, member) => sum + member.totalPoints, 0);
+    const averagePoints = totalMembers > 0 ? Math.round(totalPoints / totalMembers) : 0;
+
     return (
-      <div className="space-y-6">
-        {/* Stats Cards */}
+      <div className="space-y-8">
+        {/* Admin Information Card */}
+        {adminInfo && (
+          <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                <User size={24} className="text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span>Organization Admin</span>
+                </h3>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Name</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{adminInfo.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{adminInfo.email}</p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Wallet Address</p>
+                  <p className="font-medium text-gray-900 dark:text-white font-mono text-sm">{activeAddress}</p>
+                </div>
+                <div className="mt-4 flex items-center gap-2">
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    activeNetwork === 'mainnet' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                  }`}>
+                    {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
+                  </div>
+                  <div className="px-3 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300 rounded-full text-sm font-medium">
+                    {subscriptionPlan ? `${subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1)} Plan` : 'Free Plan'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
             <div className="flex items-center justify-between">
@@ -1551,12 +1628,12 @@ export function LoyaltyProgramDashboard({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-purple-100 text-sm">Active Passes</p>
-                <p className="text-3xl font-bold">{activePasses}</p>
+                <p className="text-3xl font-bold">{members.filter(m => m.totalPoints > 0).length}</p>
               </div>
               <Star className="h-8 w-8 text-purple-200" />
             </div>
             <div className="mt-2">
-              <p className="text-purple-100 text-xs">{((activePasses / members.length) * 100 || 0).toFixed(0)}% of total members</p>
+              <p className="text-purple-100 text-xs">{((members.filter(m => m.totalPoints > 0).length / members.length) * 100 || 0).toFixed(0)}% of total members</p>
             </div>
           </div>
           
