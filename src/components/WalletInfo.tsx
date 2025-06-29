@@ -156,13 +156,13 @@ export function WalletInfo({ subscriptionPlan = null }: WalletInfoProps) {
               </>
             ) : (
               <>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {nfd?.name || formatShortAddress(activeAddress)}
-                </h2>
-                {nfd?.name && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                    {formatShortAddress(activeAddress)}
-                  </p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              {nfd?.name || formatShortAddress(activeAddress)}
+            </h2>
+            {nfd?.name && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                {formatShortAddress(activeAddress)}
+              </p>
                 )}
               </>
             )}
