@@ -4,7 +4,6 @@ import { supabase } from '../utils/supabase';
 import { WalletInfo } from './WalletInfo';
 import { ChangePassword } from './ChangePassword';
 import { PasswordReset } from './PasswordReset';
-import { ChangeEmail } from './ChangeEmail';
 import { Settings, KeyRound, Mail, User, AlertTriangle } from 'lucide-react';
 
 interface UserSettingsProps {
@@ -20,7 +19,6 @@ export function UserSettings({ onBack }: UserSettingsProps) {
   const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
-  const [showChangeEmail, setShowChangeEmail] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -65,47 +63,6 @@ export function UserSettings({ onBack }: UserSettingsProps) {
 
   const handlePasswordResetSuccess = () => {
     setShowPasswordReset(false);
-  };
-
-  const handleChangeEmailSuccess = () => {
-    setShowChangeEmail(false);
-    // Refresh user data after email change
-    if (activeAddress) {
-      fetchUserData();
-    }
-  };
-
-  const fetchUserData = async () => {
-    if (!activeAddress) return;
-    
-    try {
-      // Get user data from Supabase
-      const { data: userData, error: userError } = await supabase
-        .from('organization_admins')
-        .select('email, full_name, subscription_plan')
-        .eq('wallet_address', activeAddress)
-        .single();
-      
-      if (userError) {
-        console.error('Error fetching user data:', userError);
-        return;
-      }
-      
-      if (userData) {
-        setUserEmail(userData.email);
-        setUserName(userData.full_name);
-        setSubscriptionPlan(userData.subscription_plan);
-        setIsAdmin(true);
-      }
-      
-      // Also check current auth session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        setUserEmail(session.user.email);
-      }
-    } catch (error) {
-      console.error('Error in fetchUserData:', error);
-    }
   };
 
   return (
@@ -173,71 +130,53 @@ export function UserSettings({ onBack }: UserSettingsProps) {
                     <div className="space-y-6">
                       <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Account Information</h2>
                       
-                      {showChangeEmail ? (
-                        <ChangeEmail
-                          currentEmail={userEmail}
-                          onSuccess={handleChangeEmailSuccess}
-                          onCancel={() => setShowChangeEmail(false)}
-                        />
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Full Name
-                              </label>
-                              <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
-                                <User size={18} className="text-gray-400 mr-2" />
-                                <span>{userName || 'Not available'}</span>
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Email Address
-                              </label>
-                              <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
-                                <div className="flex items-center">
-                                  <Mail size={18} className="text-gray-400 mr-2" />
-                                  <span>{userEmail || 'Not available'}</span>
-                                </div>
-                                <button
-                                  onClick={() => setShowChangeEmail(true)}
-                                  className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-                                >
-                                  Change
-                                </button>
-                              </div>
-                            </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Full Name
+                          </label>
+                          <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
+                            <User size={18} className="text-gray-400 mr-2" />
+                            <span>{userName || 'Not available'}</span>
                           </div>
-                          
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Wallet Address
-                            </label>
-                            <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
-                              <span className="font-mono text-sm break-all">{activeAddress}</span>
-                            </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Email Address
+                          </label>
+                          <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
+                            <Mail size={18} className="text-gray-400 mr-2" />
+                            <span>{userEmail || 'Not available'}</span>
                           </div>
-                          
-                          {isAdmin && (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Subscription Plan
-                              </label>
-                              <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  subscriptionPlan === 'free' ? 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200' : 
-                                  subscriptionPlan === 'basic' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' :
-                                  subscriptionPlan === 'pro' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300' :
-                                  'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                                }`}>
-                                  {subscriptionPlan ? subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1) : 'No Plan'}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Wallet Address
+                        </label>
+                        <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
+                          <span className="font-mono text-sm break-all">{activeAddress}</span>
+                        </div>
+                      </div>
+                      
+                      {isAdmin && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Subscription Plan
+                          </label>
+                          <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md px-4 py-3">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              subscriptionPlan === 'free' ? 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200' : 
+                              subscriptionPlan === 'basic' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' :
+                              subscriptionPlan === 'pro' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300' :
+                              'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                            }`}>
+                              {subscriptionPlan ? subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1) : 'No Plan'}
+                            </span>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
