@@ -223,13 +223,13 @@ function AppContent() {
                   </select>
                 </div>
               )}
-              <WalletButton />
+                  <WalletButton />
                 </div>
               </div>
             </div>
-      </header>
+          </header>
       
-      {/* Main content area */}
+          {/* Main content area */}
       <main>
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -265,8 +265,8 @@ function AppContent() {
               <a href="#" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
                 Support
               </a>
+              </div>
             </div>
-          </div>
         </div>
       </footer>
     </div>

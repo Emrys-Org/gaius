@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Award, TrendingUp, CreditCard, MessageSquare } from 'lucide-react';
 import { XPTransaction } from '../utils/xp';
 import { TextWithCopy } from './TextWithCopy';
+import { getFirstLoyaltyPassDate } from '../utils/algod';
+import { useNetwork } from '@txnlab/use-wallet-react';
 
 interface Member {
   id: string;
@@ -47,6 +49,20 @@ export function MemberCard({
 }: MemberCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [actualJoinDate, setActualJoinDate] = useState<string | null>(null);
+  const { activeNetwork } = useNetwork();
+
+  useEffect(() => {
+    const fetchJoinDate = async () => {
+      const network = activeNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+      const date = await getFirstLoyaltyPassDate(member.address, member.assetIds, network);
+      if (date) {
+        setActualJoinDate(date);
+      }
+    };
+
+    fetchJoinDate();
+  }, [member.address, member.assetIds, activeNetwork]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('en-US', {
@@ -138,7 +154,7 @@ export function MemberCard({
               </button>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Member since {new Date(member.joinDate).toLocaleDateString()}
+              Member since {actualJoinDate ? new Date(actualJoinDate).toLocaleDateString() : 'Loading...'}
             </p>
           </div>
         </div>
