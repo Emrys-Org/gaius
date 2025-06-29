@@ -1,11 +1,79 @@
-import { useWallet } from '@txnlab/use-wallet-react';
+import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import { useAccountInfo, useNfd, NfdAvatar } from '@txnlab/use-wallet-ui-react';
 import { formatNumber, formatShortAddress } from '@txnlab/utils-ts';
+import { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+import { User, LogOut } from 'lucide-react';
 
-export function WalletInfo() {
+interface WalletInfoProps {
+  subscriptionPlan?: string | null;
+}
+
+export function WalletInfo({ subscriptionPlan = null }: WalletInfoProps) {
   const { activeAddress } = useWallet();
+  const { activeNetwork } = useNetwork();
   const nfdQuery = useNfd();
   const accountQuery = useAccountInfo();
+  const [adminName, setAdminName] = useState<string | null>(null);
+  const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  // Fetch admin info when address changes
+  useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (!activeAddress) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('organization_admins')
+          .select('full_name, email')
+          .eq('wallet_address', activeAddress)
+          .single();
+        
+        if (error) {
+          console.log('Not an admin or error fetching admin info:', error);
+          setIsAdmin(false);
+          return;
+        }
+        
+        if (data) {
+          setAdminName(data.full_name);
+          setAdminEmail(data.email);
+          setIsAdmin(true);
+        }
+      } catch (error) {
+        console.error('Error fetching admin info:', error);
+      }
+    };
+    
+    fetchAdminInfo();
+  }, [activeAddress]);
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true);
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut({
+        scope: 'global' // Sign out from all devices
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Redirect to home page or refresh
+      window.location.href = '/';
+      
+    } catch (error: any) {
+      console.error('Error signing out:', error);
+      alert(`Error signing out: ${error.message}`);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   if (!activeAddress) {
     return (
@@ -40,13 +108,63 @@ export function WalletInfo() {
         <div className="flex items-center gap-4">
           <NfdAvatar nfd={nfd} size={64} className="rounded-xl" />
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              {nfd?.name || formatShortAddress(activeAddress)}
-            </h2>
-            {nfd?.name && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                {formatShortAddress(activeAddress)}
-              </p>
+            {isAdmin && adminName ? (
+              <>
+                <div className="flex items-center gap-2 mb-1">
+                  <User size={16} className="text-blue-500" />
+                  <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                    Organization Admin
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {adminName}
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                  {formatShortAddress(activeAddress)}
+                </p>
+                {adminEmail && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    {adminEmail}
+                  </p>
+                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    activeNetwork === 'mainnet' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                  }`}>
+                    {activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'}
+                  </div>
+                  {subscriptionPlan && (
+                    <div className="px-2 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300 rounded-full text-xs font-medium">
+                      {subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1)} Plan
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  className="mt-3 flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                >
+                  {isSigningOut ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full"></div>
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  <span>Sign Out</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {nfd?.name || formatShortAddress(activeAddress)}
+                </h2>
+                {nfd?.name && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                    {formatShortAddress(activeAddress)}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

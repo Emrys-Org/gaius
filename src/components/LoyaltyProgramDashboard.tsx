@@ -1,16 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useWallet, useNetwork } from '@txnlab/use-wallet-react';
 import algosdk from 'algosdk';
-import { LoyaltyProgramMinter } from './LoyaltyProgramMinter';
-import { LoyaltyPassTransfer } from './LoyaltyPassTransfer';
-import { XPManager } from './XPManager';
 import { getAlgodClient, getNetworkConfig } from '../utils/algod';
 import { getIPFSGatewayURL } from '../utils/pinata';
-import * as QRCode from 'qrcode';
-import { QrCode, Download, BarChart3, Users, Trophy, Settings, Eye, Plus, TrendingUp, Award, Star, X, Calendar, MapPin, Palette, CreditCard, Send, Wallet, ExternalLink, ArrowRight, MessageSquare } from 'lucide-react';
-import { XPTransaction, fetchMemberXPTransactions } from '../utils/xp';
 import { MessageCenter } from './MessageCenter';
+import { LoyaltyProgramMinter } from './LoyaltyProgramMinter';
+import { LoyaltyPassSender } from './LoyaltyPassSender';
+import { LoyaltyPassTransfer } from './LoyaltyPassTransfer';
+import { XPManager } from './XPManager';
+import { fetchMemberXPTransactions, XPTransaction } from '../utils/xp';
+import { supabase } from '../utils/supabase';
+import { 
+  BarChart3, Award, Users, Trophy, TrendingUp, Send, 
+  Plus, X, ChevronLeft, Video, Music, FileText, Box,
+  Image, File, ExternalLink, QrCode, CreditCard,
+  Download, ArrowRight, MessageSquare, Eye, Calendar, MapPin, 
+  Palette, Wallet, Star, Settings, User, Building2, LogOut,
+  AlertTriangle, AlertCircle
+} from 'lucide-react';
+import * as QRCode from 'qrcode';
 import { MemberCard } from './MemberCard';
+import { hasReachedMemberLimit, hasReachedProgramLimit, SUBSCRIPTION_PLANS } from '../utils/subscription';
 
 interface LoyaltyProgramInfo {
   id: number;
@@ -50,6 +60,11 @@ interface TierChange {
   from: string;
   to: string;
   timestamp: number;
+}
+
+interface LoyaltyProgramDashboardProps {
+  subscriptionPlan?: string | null;
+  onNavigateToPricing?: () => void;
 }
 
 // Helper to determine media type from metadata or URL
@@ -119,40 +134,106 @@ const determineTier = (points: number, tiers: any[]): string => {
   return sortedTiers[0]?.name || 'Bronze';
 };
 
-export function LoyaltyProgramDashboard() {
+export function LoyaltyProgramDashboard({ 
+  subscriptionPlan = null,
+  onNavigateToPricing
+}: LoyaltyProgramDashboardProps) {
   const { activeAddress, signTransactions } = useWallet();
   const { activeNetwork } = useNetwork();
-  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<LoyaltyProgramInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isMembersLoading, setIsMembersLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'create' | 'transfer' | 'xp-manager'>('overview');
   const [error, setError] = useState<string | null>(null);
+  const [userLoyaltyPrograms, setUserLoyaltyPrograms] = useState<LoyaltyProgramInfo[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
-  const [selectedProgram, setSelectedProgram] = useState<LoyaltyProgramInfo | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'xp-manager' | 'create' | 'transfer'>('overview');
   const [showProgramDetails, setShowProgramDetails] = useState(false);
+  const [selectedProgram, setSelectedProgram] = useState<LoyaltyProgramInfo | null>(null);
   const [showLoyaltyPassModal, setShowLoyaltyPassModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [issuingLoyaltyPass, setIssuingLoyaltyPass] = useState(false);
-  const [nftPassResult, setNftPassResult] = useState<{ success: boolean; message: string; assetId?: number } | null>(null);
-  const [recipientAddress, setRecipientAddress] = useState('');
-  const [selectedProgramId, setSelectedProgramId] = useState(0);
   const [isTransferringPass, setIsTransferringPass] = useState(false);
+  const [nftPassResult, setNftPassResult] = useState<{ success: boolean; message: string; assetId?: number } | null>(null);
   const [pendingTransferAssetId, setPendingTransferAssetId] = useState<number | null>(null);
   const [showMessageCenter, setShowMessageCenter] = useState(false);
+  const [recentActivities, setRecentActivities] = useState<Array<{id: string; type: string; message: string; timestamp: string; color: string}>>([]);
   const [selectedMemberForMessage, setSelectedMemberForMessage] = useState<Member | null>(null);
+  const [recipientAddress, setRecipientAddress] = useState('');
+  const [selectedProgramId, setSelectedProgramId] = useState(0);
+  const [adminInfo, setAdminInfo] = useState<{name: string; email: string} | null>(null);
   
-  // Real members data from blockchain
-  const [members, setMembers] = useState<Member[]>([]);
+  // Search state variables
+  const [programSearchQuery, setProgramSearchQuery] = useState('');
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
-  const leaderboard: LeaderboardEntry[] = members
-    .sort((a, b) => b.totalPoints - a.totalPoints)
-    .map((member, index) => ({
-      rank: index + 1,
-      member,
-      points: member.totalPoints,
-      badge: index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : undefined
-    }));
+  // Fetch admin info when component mounts
+  useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (!activeAddress) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('organization_admins')
+          .select('full_name, email')
+          .eq('wallet_address', activeAddress)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching admin info:', error);
+          return;
+        }
+        
+        if (data) {
+          setAdminInfo({
+            name: data.full_name,
+            email: data.email
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching admin info:', error);
+      }
+    };
+    
+    fetchAdminInfo();
+  }, [activeAddress]);
+
+  // Filtered programs and members based on search queries
+  const filteredPrograms = useMemo(() => {
+    if (!programSearchQuery.trim()) return userLoyaltyPrograms;
+    
+    const query = programSearchQuery.toLowerCase();
+    return userLoyaltyPrograms.filter(program => 
+      program.name.toLowerCase().includes(query) || 
+      program.id.toString().includes(query) ||
+      program.unitName?.toLowerCase().includes(query) ||
+      program.metadata?.desc?.toLowerCase().includes(query) ||
+      program.metadata?.description?.toLowerCase().includes(query)
+    );
+  }, [userLoyaltyPrograms, programSearchQuery]);
+
+  const filteredMembers = useMemo(() => {
+    if (!memberSearchQuery.trim()) return members;
+    
+    const query = memberSearchQuery.toLowerCase();
+    return members.filter(member => 
+      member.address.toLowerCase().includes(query) || 
+      member.id.toLowerCase().includes(query) ||
+      member.currentTier.toLowerCase().includes(query) ||
+      member.assetIds.some(id => id.toString().includes(query))
+    );
+  }, [members, memberSearchQuery]);
+
+  // Leaderboard based on filtered members
+  const leaderboard = useMemo(() => {
+    return filteredMembers
+      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .map((member, index) => ({
+        rank: index + 1,
+        member,
+        points: member.totalPoints,
+        badge: index === 0 ? '🏆' : index === 1 ? '🥈' : index === 2 ? '🥉' : undefined
+      }));
+  }, [filteredMembers]);
 
   // Get network-specific configuration
   const getNetworkInfo = () => {
@@ -416,7 +497,7 @@ export function LoyaltyProgramDashboard() {
                     memberInfo.assetIds.push(typeof asset.index === 'bigint' ? Number(asset.index) : asset.index);
                   } else {
                     // Try to fetch metadata from the asset to get member details
-                    let memberName = "Unknown Member";
+                    let memberName = holderAddress;
                     let memberEmail = "";
                     let joinDate = new Date().toISOString();
                     
@@ -431,7 +512,6 @@ export function LoyaltyProgramDashboard() {
                           
                           // Extract member information from metadata
                           if (metadata.member) {
-                            memberName = metadata.member.name || memberName;
                             memberEmail = metadata.member.email || memberEmail;
                             joinDate = metadata.member.joinDate || metadata.issuedAt || joinDate;
                           }
@@ -445,12 +525,12 @@ export function LoyaltyProgramDashboard() {
                     memberInfo = {
                       id: holderAddress.substring(0, 8),
                       address: holderAddress,
-                      name: memberName,
+                      name: `${holderAddress.substring(0, 6)}...${holderAddress.substring(holderAddress.length - 4)}`,
                       email: memberEmail,
                       joinDate: joinDate,
                       totalPoints: 0, // Will be updated with blockchain data
                       currentTier: 'Bronze', // Will be updated with blockchain data
-                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=random`,
+                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(holderAddress.substring(0, 4))}&background=random`,
                       assetIds: [typeof asset.index === 'bigint' ? Number(asset.index) : asset.index]
                     };
                     
@@ -592,12 +672,12 @@ export function LoyaltyProgramDashboard() {
       // Create Loyalty Program Pass metadata
       const passMetadata = {
         name: `${loyaltyProgram.name} - ${updatedTier} Pass`,
-        description: `Loyalty pass for ${selectedMember.name} in ${loyaltyProgram.name} program`,
+        description: `Loyalty pass for ${selectedMember.address.substring(0, 6)}...${selectedMember.address.substring(selectedMember.address.length - 4)} in ${loyaltyProgram.name} program`,
         image: loyaltyProgram.imageUrl,
         type: 'loyalty-pass',
         member: {
           id: selectedMember.id,
-          name: selectedMember.name,
+          name: `${selectedMember.address.substring(0, 6)}...${selectedMember.address.substring(selectedMember.address.length - 4)}`,
           email: selectedMember.email,
           tier: updatedTier, // Use the updated tier
           points: newTotalPoints, // Use the new points total
@@ -633,7 +713,7 @@ export function LoyaltyProgramDashboard() {
         sender: activeAddress,
         total: 1,
         decimals: 0,
-        assetName: `${loyaltyProgram.name} Pass - ${selectedMember.name}`,
+        assetName: `${loyaltyProgram.name} Pass`,
         unitName: 'PASS',
         assetURL: loyaltyProgram.imageUrl,
         note: metadataBytes,
@@ -683,7 +763,7 @@ export function LoyaltyProgramDashboard() {
           const xpActivity = {
             id: `xp-initial-${Date.now()}`,
             type: 'xp_awarded',
-            message: `${updatedMember.name || updatedMember.address.substring(0, 8)}... received ${initialXP} initial XP`,
+            message: `${updatedMember.address.substring(0, 6)}...${updatedMember.address.substring(updatedMember.address.length - 4)} received ${initialXP} initial XP`,
             timestamp: new Date().toISOString(),
             color: 'green'
           };
@@ -1411,6 +1491,7 @@ export function LoyaltyProgramDashboard() {
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-700">
             <div className="text-center p-4">
+              <Box className="mx-auto h-8 w-8 text-blue-500 mb-2" />
               <p className="text-sm font-medium">3D Model</p>
               <p className="text-xs text-gray-500 mt-1">{program.name}</p>
               <a 
@@ -1428,6 +1509,7 @@ export function LoyaltyProgramDashboard() {
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-700">
             <div className="text-center p-4">
+              <File className="mx-auto h-8 w-8 text-blue-500 mb-2" />
               <p className="text-sm font-medium">Document</p>
               <p className="text-xs text-gray-500 mt-1">{program.name}</p>
               <a 
@@ -1445,6 +1527,7 @@ export function LoyaltyProgramDashboard() {
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-700">
             <div className="text-center p-4">
+              <Award className="mx-auto h-8 w-8 text-blue-500 mb-2" />
               <p className="text-sm font-medium">Loyalty Program</p>
               <p className="text-xs text-gray-500 mt-1">{program.name}</p>
               <a 
@@ -1463,13 +1546,24 @@ export function LoyaltyProgramDashboard() {
 
   // Render different dashboard sections
   const renderOverview = () => {
-    // Calculate stats
-    const totalPoints = members.reduce((sum, m) => sum + m.totalPoints, 0);
-    const activePasses = members.filter(m => m.totalPoints > 0).length; // Members with points are considered active
+    // Calculate statistics
+    const totalPrograms = userLoyaltyPrograms.length;
+    const totalMembers = members.length;
+    const totalPoints = members.reduce((sum, member) => sum + member.totalPoints, 0);
+    const averagePoints = totalMembers > 0 ? Math.round(totalPoints / totalMembers) : 0;
+
+    // Get subscription limits
+    const planDetails = subscriptionPlan ? SUBSCRIPTION_PLANS[subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS] : null;
+    const memberLimit = planDetails?.memberLimit || 0;
+    const programLimit = planDetails?.programLimit || 0;
     
+    // Calculate usage percentages
+    const memberUsagePercent = memberLimit ? Math.min(100, Math.round((totalMembers / memberLimit) * 100)) : 100;
+    const programUsagePercent = programLimit ? Math.min(100, Math.round((totalPrograms / programLimit) * 100)) : 100;
+
     return (
-      <div className="space-y-6">
-        {/* Stats Cards */}
+      <div className="space-y-8">
+        {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
             <div className="flex items-center justify-between">
@@ -1480,9 +1574,23 @@ export function LoyaltyProgramDashboard() {
               <Award className="h-8 w-8 text-blue-200" />
             </div>
             <div className="mt-2">
-              <p className="text-blue-100 text-xs">
-                {userLoyaltyPrograms.length > 0 ? '+2 this month' : 'Create your first program'}
-              </p>
+              {planDetails ? (
+                <div className="w-full bg-blue-200/30 h-2 rounded-full mt-2">
+                  <div 
+                    className="bg-blue-100 h-2 rounded-full" 
+                    style={{ width: `${programUsagePercent}%` }}
+                  ></div>
+                </div>
+              ) : (
+                <p className="text-blue-100 text-xs">
+                  {userLoyaltyPrograms.length > 0 ? '+2 this month' : 'Create your first program'}
+                </p>
+              )}
+              {planDetails && (
+                <p className="text-blue-100 text-xs mt-1">
+                  {userLoyaltyPrograms.length} of {planDetails.programLimit === Infinity ? 'Unlimited' : planDetails.programLimit} programs
+                </p>
+              )}
             </div>
           </div>
           
@@ -1495,7 +1603,21 @@ export function LoyaltyProgramDashboard() {
               <Users className="h-8 w-8 text-green-200" />
             </div>
             <div className="mt-2">
-              <p className="text-green-100 text-xs">+{Math.floor(members.length * 0.2)} this week</p>
+              {planDetails ? (
+                <div className="w-full bg-green-200/30 h-2 rounded-full mt-2">
+                  <div 
+                    className="bg-green-100 h-2 rounded-full" 
+                    style={{ width: `${memberUsagePercent}%` }}
+                  ></div>
+                </div>
+              ) : (
+                <p className="text-green-100 text-xs">+{Math.floor(members.length * 0.2)} this week</p>
+              )}
+              {planDetails && (
+                <p className="text-green-100 text-xs mt-1">
+                  {members.length} of {planDetails.memberLimit === Infinity ? 'Unlimited' : planDetails.memberLimit} members
+                </p>
+              )}
             </div>
           </div>
           
@@ -1503,12 +1625,12 @@ export function LoyaltyProgramDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-purple-100 text-sm">Active Passes</p>
-                <p className="text-3xl font-bold">{activePasses}</p>
+                <p className="text-3xl font-bold">{members.filter(m => m.totalPoints > 0).length}</p>
               </div>
               <Star className="h-8 w-8 text-purple-200" />
             </div>
             <div className="mt-2">
-              <p className="text-purple-100 text-xs">{((activePasses / members.length) * 100 || 0).toFixed(0)}% of total members</p>
+              <p className="text-purple-100 text-xs">{((members.filter(m => m.totalPoints > 0).length / members.length) * 100 || 0).toFixed(0)}% of total members</p>
             </div>
           </div>
           
@@ -1525,6 +1647,69 @@ export function LoyaltyProgramDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Subscription Warning */}
+        {!subscriptionPlan && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6 text-yellow-800 dark:text-yellow-300">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-800 rounded-full">
+                <AlertTriangle size={24} className="text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">No Active Subscription</h3>
+                <p className="mb-4">You don't have an active subscription plan. Subscribe to unlock more features and increase your program limits.</p>
+                <button
+                  onClick={onNavigateToPricing}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                >
+                  View Pricing Plans
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Program Limit Warning */}
+        {subscriptionPlan && planDetails && userLoyaltyPrograms.length >= planDetails.programLimit && planDetails.programLimit !== Infinity && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-red-800 dark:text-red-300">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-red-100 dark:bg-red-800 rounded-full">
+                <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Program Limit Reached</h3>
+                <p className="mb-4">You've reached the maximum number of loyalty programs for your current subscription plan.</p>
+                <button
+                  onClick={onNavigateToPricing}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Member Limit Warning */}
+        {subscriptionPlan && planDetails && members.length >= planDetails.memberLimit && planDetails.memberLimit !== Infinity && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-red-800 dark:text-red-300">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-red-100 dark:bg-red-800 rounded-full">
+                <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Member Limit Reached</h3>
+                <p className="mb-4">You've reached the maximum number of members for your current subscription plan.</p>
+                <button
+                  onClick={onNavigateToPricing}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recent Programs and Activity Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1651,7 +1836,11 @@ export function LoyaltyProgramDashboard() {
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <div className="flex-1">
                   <p className="font-medium">New member joined</p>
-                  <p className="text-sm text-gray-500">Eva Martinez joined the Gold tier program</p>
+                  <p className="text-sm text-gray-500">
+                    {members[0]?.address ? 
+                      `${members[0].address.substring(0, 6)}...${members[0].address.substring(members[0].address.length - 4)}` : 
+                      'ABCD...XYZ'} joined the Gold tier program
+                  </p>
                 </div>
                 <span className="text-sm text-gray-400">2 hours ago</span>
               </div>
@@ -1659,7 +1848,11 @@ export function LoyaltyProgramDashboard() {
                 <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                 <div className="flex-1">
                   <p className="font-medium">Points redeemed</p>
-                  <p className="text-sm text-gray-500">Alice Johnson redeemed 500 points</p>
+                  <p className="text-sm text-gray-500">
+                    {members[1]?.address ? 
+                      `${members[1].address.substring(0, 6)}...${members[1].address.substring(members[1].address.length - 4)}` : 
+                      'EFGH...UVW'} redeemed 500 points
+                  </p>
                 </div>
                 <span className="text-sm text-gray-400">5 hours ago</span>
               </div>
@@ -1667,7 +1860,7 @@ export function LoyaltyProgramDashboard() {
                 <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                 <div className="flex-1">
                   <p className="font-medium">Tier upgrade</p>
-                  <p className="text-sm text-gray-500">Bob Smith upgraded to Silver tier</p>
+                  <p className="text-sm text-gray-500">Member {members[2]?.name || 'IJKL...QRS'} upgraded to Silver tier</p>
                 </div>
                 <span className="text-sm text-gray-400">1 day ago</span>
               </div>
@@ -1675,7 +1868,7 @@ export function LoyaltyProgramDashboard() {
                 <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
                 <div className="flex-1">
                   <p className="font-medium">Points earned</p>
-                  <p className="text-sm text-gray-500">Carol Davis earned 250 points from purchase</p>
+                  <p className="text-sm text-gray-500">Member {members[3]?.name || 'MNOP...MNO'} earned 250 points from purchase</p>
                 </div>
                 <span className="text-sm text-gray-400">3 days ago</span>
               </div>
@@ -1699,6 +1892,30 @@ export function LoyaltyProgramDashboard() {
         </button>
       </div>
       
+      {/* Search bar */}
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search programs by name, ID, or description..."
+          value={programSearchQuery}
+          onChange={(e) => setProgramSearchQuery(e.target.value)}
+          className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        {programSearchQuery && (
+          <button
+            onClick={() => setProgramSearchQuery('')}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+      
       {isLoading ? (
         <div className="text-center p-8">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent mb-4"></div>
@@ -1720,9 +1937,21 @@ export function LoyaltyProgramDashboard() {
             Create a Loyalty Program
           </button>
         </div>
+      ) : filteredPrograms.length === 0 ? (
+        <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <p className="text-gray-600 dark:text-gray-300">
+            No programs match your search. Try different keywords or clear the search.
+          </p>
+          <button
+            onClick={() => setProgramSearchQuery('')}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Clear Search
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {userLoyaltyPrograms.map((program) => (
+          {filteredPrograms.map((program) => (
             <div
               key={program.id}
               onClick={() => handleProgramClick(program)}
@@ -1878,20 +2107,73 @@ export function LoyaltyProgramDashboard() {
         </h3>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {members.map((member) => (
-          <MemberCard 
-            key={member.id}
-            member={member}
-            tiers={extractProgramTiers()}
-            onSendMessage={handleSendMessage}
-            onIssueLoyaltyPass={handleIssueLoyaltyPass}
-            onUpdateXP={() => setActiveTab('xp-manager')}
-            showActions={true}
-            showTierProgress={true}
-          />
-        ))}
+      {/* Search bar */}
+      <div className="relative mb-6">
+        <input
+          type="text"
+          placeholder="Search members by address, tier, or pass ID..."
+          value={memberSearchQuery}
+          onChange={(e) => setMemberSearchQuery(e.target.value)}
+          className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        {memberSearchQuery && (
+          <button
+            onClick={() => setMemberSearchQuery('')}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
+
+      {isMembersLoading ? (
+        <div className="text-center p-8">
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-300">Loading members...</p>
+        </div>
+      ) : membersError ? (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-4 rounded-lg">
+          {membersError}
+        </div>
+      ) : members.length === 0 ? (
+        <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <p className="text-gray-600 dark:text-gray-300">
+            No members found. Issue loyalty passes to add members.
+          </p>
+        </div>
+      ) : filteredMembers.length === 0 ? (
+        <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <p className="text-gray-600 dark:text-gray-300">
+            No members match your search. Try different keywords or clear the search.
+          </p>
+          <button
+            onClick={() => setMemberSearchQuery('')}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Clear Search
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredMembers.map((member) => (
+            <MemberCard 
+              key={member.id}
+              member={member}
+              tiers={extractProgramTiers()}
+              onSendMessage={handleSendMessage}
+              onIssueLoyaltyPass={handleIssueLoyaltyPass}
+              onUpdateXP={() => setActiveTab('xp-manager')}
+              showActions={true}
+              showTierProgress={true}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -1983,18 +2265,15 @@ export function LoyaltyProgramDashboard() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="text-sm font-medium text-gray-900 dark:text-white font-mono">
-                          {entry.member.address.substring(0, 12)}...{entry.member.address.substring(entry.member.address.length - 8)}
+                          {entry.member.address.substring(0, 8)}...{entry.member.address.substring(entry.member.address.length - 8)}
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
                               navigator.clipboard.writeText(entry.member.address);
                               // Show a temporary tooltip or notification
                               const target = e.currentTarget;
-                              const originalText = target.innerHTML;
-                              target.innerHTML = '✓';
                               target.classList.add('text-green-500');
                               setTimeout(() => {
-                                target.innerHTML = originalText;
                                 target.classList.remove('text-green-500');
                               }, 1000);
                             }}
@@ -2062,7 +2341,7 @@ export function LoyaltyProgramDashboard() {
     const newActivity = {
       id: `xp-update-${Date.now()}`,
       type: 'xp_updated',
-      message: `${updatedMember.name || updatedMember.address.substring(0, 8)}... received XP update`,
+      message: `${updatedMember.address.substring(0, 6)}...${updatedMember.address.substring(updatedMember.address.length - 4)} received XP update`,
       timestamp: new Date().toISOString(),
       color: 'green'
     };
@@ -2194,6 +2473,56 @@ export function LoyaltyProgramDashboard() {
     setSelectedMemberForMessage(null);
   };
 
+  // Check if user has an active subscription
+  const hasActiveSubscription = !!subscriptionPlan;
+
+  // Render subscription banner
+  const renderSubscriptionBanner = () => {
+    if (hasActiveSubscription) {
+      return (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-green-100 dark:bg-green-800 p-2 rounded-full">
+              <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <p className="font-medium text-green-800 dark:text-green-300">
+                Active Subscription: {subscriptionPlan!.charAt(0).toUpperCase() + subscriptionPlan!.slice(1)} Plan
+              </p>
+              <p className="text-sm text-green-600 dark:text-green-400">
+                Your organization has full access to all features
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-yellow-100 dark:bg-yellow-800 p-2 rounded-full">
+            <CreditCard className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+          </div>
+          <div>
+            <p className="font-medium text-yellow-800 dark:text-yellow-300">
+              No Active Subscription
+            </p>
+            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+              Subscribe to a plan to unlock all features and manage more members
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onNavigateToPricing}
+          className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+        >
+          View Plans
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 my-8">
       <div className="flex justify-between items-center mb-8">
@@ -2218,6 +2547,9 @@ export function LoyaltyProgramDashboard() {
         </div>
       ) : (
         <>
+          {/* Subscription Banner */}
+          {renderSubscriptionBanner()}
+
           {/* Navigation Tabs */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto">
             <button
@@ -2304,45 +2636,55 @@ export function LoyaltyProgramDashboard() {
           {activeTab === 'members' && renderMembers()}
           {activeTab === 'leaderboard' && renderLeaderboard()}
           {activeTab === 'xp-manager' && renderXPManager()}
-          {activeTab === 'create' && (
-            <LoyaltyProgramMinter onLoyaltyProgramMinted={handleLoyaltyProgramMinted} />
-          )}
           {activeTab === 'transfer' && (
-            <LoyaltyPassTransfer 
-              onPassTransferred={(assetId, recipient) => {
-                // Add a new activity for the transfer
-                const newActivity = {
-                  id: `transfer-${assetId}-${Date.now()}`,
-                  type: 'pass_transferred',
-                  message: `Loyalty pass (Asset ID: ${assetId}) was transferred to ${recipient.substring(0, 8)}...`,
-                  timestamp: new Date().toISOString(),
-                  color: 'blue'
-                };
-                
-                setRecentActivities(prev => [newActivity, ...prev].slice(0, 5));
-                
-                // Optionally refresh programs
-                fetchUserLoyaltyPrograms();
-              }} 
-            />
+            <div className="space-y-6">
+              <h3 className="text-xl font-semibold">Transfer Loyalty Pass</h3>
+              <LoyaltyPassTransfer 
+                onPassTransferred={(assetId, recipient) => {
+                  // Add a new activity for the transfer
+                  const newActivity = {
+                    id: `transfer-${assetId}-${Date.now()}`,
+                    type: 'pass_transferred',
+                    message: `Loyalty pass (Asset ID: ${assetId}) was transferred to ${recipient.substring(0, 8)}...${recipient.substring(recipient.length - 4)}`,
+                    timestamp: new Date().toISOString(),
+                    color: 'blue'
+                  };
+                  
+                  setRecentActivities(prev => [newActivity, ...prev].slice(0, 5));
+                  
+                  // Refresh programs
+                  fetchUserLoyaltyPrograms();
+                }}
+              />
+            </div>
+          )}
+          {activeTab === 'create' && (
+            <div className="space-y-6">
+              <h3 className="text-xl font-semibold">Create New Loyalty Program</h3>
+              <LoyaltyProgramMinter 
+                onLoyaltyProgramMinted={handleLoyaltyProgramMinted}
+              />
+            </div>
           )}
         </>
       )}
       
       {/* Program Details Modal */}
-      {renderProgramDetailsModal()}
+      {showProgramDetails && selectedProgram && renderProgramDetailsModal()}
       
-      {/* Loyalty Program Pass Modal */}
-      {renderLoyaltyPassModal()}
+      {/* Loyalty Pass Modal */}
+      {showLoyaltyPassModal && selectedMember && renderLoyaltyPassModal()}
       
       {/* Message Center Modal */}
-      {showMessageCenter && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      {showMessageCenter && selectedMemberForMessage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
             <MessageCenter
-              member={selectedMemberForMessage || undefined}
+              member={selectedMemberForMessage}
               isAdmin={true}
               onClose={closeMessageCenter}
+              recipientAddress={selectedMemberForMessage.address}
+              passId={selectedMemberForMessage.assetIds[0]}
             />
           </div>
         </div>
