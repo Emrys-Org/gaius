@@ -1,85 +1,78 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../utils/supabase';
-import { AlertTriangle, CheckCircle2, Lock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Mail } from 'lucide-react';
 
-interface ChangePasswordProps {
+interface ChangeEmailProps {
+  currentEmail: string | null;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function ChangePassword({ onSuccess, onCancel }: ChangePasswordProps) {
+export function ChangeEmail({ currentEmail, onSuccess, onCancel }: ChangeEmailProps) {
+  const [newEmail, setNewEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [isResetFlow, setIsResetFlow] = useState(false);
 
-  // Check if we're in a password reset flow (i.e., user clicked reset link)
-  useEffect(() => {
-    const checkResetFlow = async () => {
-      const { data } = await supabase.auth.getSession();
-      // If we have a session and came from a reset password email
-      if (data.session?.user) {
-        const hash = window.location.hash;
-        const query = new URLSearchParams(hash.substring(1));
-        const type = query.get('type');
-        
-        if (type === 'recovery') {
-          setIsResetFlow(true);
-        }
-      }
-    };
-    
-    checkResetFlow();
-  }, []);
-
-  const validatePassword = (password: string): boolean => {
-    // Password must be at least 8 characters
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return false;
-    }
-    
-    return true;
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangeEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    
-    // Validate passwords
-    if (!password || !confirmPassword) {
-      setError('Please enter both password fields');
+    setSuccess(false);
+
+    if (!newEmail) {
+      setError('Please enter your new email address');
       return;
     }
-    
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+
+    if (!password) {
+      setError('Please enter your password for verification');
       return;
     }
-    
-    if (!validatePassword(password)) {
+
+    if (newEmail === currentEmail) {
+      setError('New email is the same as your current email');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
-      // Update the user's password
-      const { error } = await supabase.auth.updateUser({
-        password: password
+      // First verify the user's password by signing in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentEmail || '',
+        password
       });
-      
-      if (error) {
-        throw error;
+
+      if (signInError) {
+        throw new Error('Incorrect password. Please try again.');
       }
-      
+
+      // Update the email in Supabase Auth
+      const { error: updateError } = await supabase.auth.updateUser({
+        email: newEmail
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Update the email in the organization_admins table
+      if (currentEmail) {
+        const { error: dbUpdateError } = await supabase
+          .from('organization_admins')
+          .update({ email: newEmail })
+          .eq('email', currentEmail);
+
+        if (dbUpdateError) {
+          console.error('Error updating email in database:', dbUpdateError);
+          // Continue anyway since the auth email was updated successfully
+        }
+      }
+
       setSuccess(true);
-      
-      // Clear form
+      setNewEmail('');
       setPassword('');
-      setConfirmPassword('');
       
       // Call success callback after a delay
       if (onSuccess) {
@@ -88,59 +81,69 @@ export function ChangePassword({ onSuccess, onCancel }: ChangePasswordProps) {
         }, 3000);
       }
     } catch (error: any) {
-      setError(error.message || 'Failed to update password');
+      setError(error.message || 'Failed to update email');
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   return (
     <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
       <div className="flex items-center justify-center mb-6">
-        <Lock className="text-blue-500 mr-2" size={24} />
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-          {isResetFlow ? 'Set New Password' : 'Change Password'}
-        </h2>
+        <Mail className="text-blue-500 mr-2" size={24} />
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Change Email Address</h2>
       </div>
       
       {!success ? (
-        <form onSubmit={handleChangePassword} className="space-y-4">
+        <form onSubmit={handleChangeEmail} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              New Password
+              Current Email
+            </label>
+            <input
+              type="email"
+              value={currentEmail || ''}
+              disabled
+              className="block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              New Email Address
+            </label>
+            <input
+              type="email"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="Enter your new email address"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Password Verification
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="Enter new password"
+              placeholder="Enter your current password"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Password must be at least 8 characters
+              For security reasons, please enter your current password
             </p>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="Confirm new password"
-            />
-          </div>
-          
+
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
               <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={16} />
               <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
             </div>
           )}
-          
+
           <div className="flex gap-3 pt-2">
             {onCancel && (
               <button
@@ -151,10 +154,10 @@ export function ChangePassword({ onSuccess, onCancel }: ChangePasswordProps) {
                 Cancel
               </button>
             )}
-            
+
             <button
               type="submit"
-              disabled={isLoading || !password || !confirmPassword}
+              disabled={isLoading || !newEmail || !password}
               className="flex-1 flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
@@ -166,7 +169,7 @@ export function ChangePassword({ onSuccess, onCancel }: ChangePasswordProps) {
                   Updating...
                 </>
               ) : (
-                'Update Password'
+                'Update Email'
               )}
             </button>
           </div>
@@ -176,15 +179,18 @@ export function ChangePassword({ onSuccess, onCancel }: ChangePasswordProps) {
           <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
             <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Password Updated</h3>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Verification Email Sent</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Your password has been successfully updated
+            We've sent a verification link to <span className="font-medium">{newEmail}</span>
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Please check your email and click the verification link to complete the process
           </p>
           <button
-            onClick={onSuccess}
-            className="mt-4 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            onClick={onCancel}
+            className="mt-4 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            Continue
+            Back to Settings
           </button>
         </div>
       )}

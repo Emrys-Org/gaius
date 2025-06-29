@@ -2680,7 +2680,7 @@ export function LoyaltyProgramDashboard({
           )}
           {activeTab === 'settings' && (
             <UserSettings 
-              onClose={() => setActiveTab('overview')}
+              onBack={() => setActiveTab('overview')}
             />
           )}
         </>
