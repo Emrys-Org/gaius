@@ -8,6 +8,7 @@ import { LoyaltyProgramMinter } from './LoyaltyProgramMinter';
 import { LoyaltyPassSender } from './LoyaltyPassSender';
 import { LoyaltyPassTransfer } from './LoyaltyPassTransfer';
 import { XPManager } from './XPManager';
+import { UserSettings } from './UserSettings';
 import { fetchMemberXPTransactions, XPTransaction } from '../utils/xp';
 import { supabase } from '../utils/supabase';
 import { 
@@ -146,7 +147,7 @@ export function LoyaltyProgramDashboard({
   const [members, setMembers] = useState<Member[]>([]);
   const [isMembersLoading, setIsMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'xp-manager' | 'create' | 'transfer'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'programs' | 'members' | 'leaderboard' | 'xp-manager' | 'create' | 'transfer' | 'settings'>('overview');
   const [showProgramDetails, setShowProgramDetails] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<LoyaltyProgramInfo | null>(null);
   const [showLoyaltyPassModal, setShowLoyaltyPassModal] = useState(false);
@@ -2628,6 +2629,17 @@ export function LoyaltyProgramDashboard({
               <Send size={20} />
               Transfer Pass
             </button>
+            <button
+              className={`py-3 px-6 font-medium text-lg whitespace-nowrap flex items-center gap-2 ${
+                activeTab === 'settings'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
+              onClick={() => setActiveTab('settings')}
+            >
+              <Settings size={20} />
+              Settings
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -2665,6 +2677,11 @@ export function LoyaltyProgramDashboard({
                 onLoyaltyProgramMinted={handleLoyaltyProgramMinted}
               />
             </div>
+          )}
+          {activeTab === 'settings' && (
+            <UserSettings 
+              onClose={() => setActiveTab('overview')}
+            />
           )}
         </>
       )}
