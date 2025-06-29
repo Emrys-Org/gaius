@@ -947,66 +947,66 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
   };
 
   // Add subscription warning component
-  const renderSubscriptionWarning = () => {
-    if (isCheckingSubscription) {
-      return (
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 flex items-center gap-3">
-          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
-          <p className="text-blue-800 dark:text-blue-300">Checking subscription status...</p>
-        </div>
-      );
-    }
+  // const renderSubscriptionWarning = () => {
+  //   if (isCheckingSubscription) {
+  //     return (
+  //       <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 flex items-center gap-3">
+  //         <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+  //         <p className="text-blue-800 dark:text-blue-300">Checking subscription status...</p>
+  //       </div>
+  //     );
+  //   }
 
-    if (!subscription || !subscription.isActive) {
-      return (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
-            <div>
-              <p className="font-medium text-yellow-800 dark:text-yellow-300">No active subscription</p>
-              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                You don't have an active subscription plan. Your ability to create loyalty programs may be limited.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
+  //   if (!subscription || !subscription.isActive) {
+  //     return (
+  //       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+  //         <div className="flex items-start gap-3">
+  //           <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+  //           <div>
+  //             <p className="font-medium text-yellow-800 dark:text-yellow-300">No active subscription</p>
+  //             <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+  //               You don't have an active subscription plan. Your ability to create loyalty programs may be limited.
+  //             </p>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     );
+  //   }
 
-    if (hasReachedLimit()) {
-      return (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
-            <div>
-              <p className="font-medium text-red-800 dark:text-red-300">Program limit reached</p>
-              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
-                You've reached the maximum number of loyalty programs ({userProgramCount}) for your {subscription.plan} plan. 
-                Please upgrade your subscription to create more programs.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
+  //   if (hasReachedLimit()) {
+  //     return (
+  //       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+  //         <div className="flex items-start gap-3">
+  //           <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+  //           <div>
+  //             <p className="font-medium text-red-800 dark:text-red-300">Program limit reached</p>
+  //             <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+  //               You've reached the maximum number of loyalty programs ({userProgramCount}) for your {subscription.plan} plan. 
+  //               Please upgrade your subscription to create more programs.
+  //             </p>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     );
+  //   }
 
-    const remainingSlots = getRemainingSlots();
-    return (
-      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
-        <div className="flex items-start gap-3">
-          <Award className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" size={20} />
-          <div>
-            <p className="font-medium text-green-800 dark:text-green-300">{subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan active</p>
-            <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-              {remainingSlots === Infinity 
-                ? "You can create unlimited loyalty programs with your current plan." 
-                : `You can create ${remainingSlots} more loyalty program${remainingSlots !== 1 ? 's' : ''} with your current plan.`}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  //   const remainingSlots = getRemainingSlots();
+  //   return (
+  //     <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+  //       <div className="flex items-start gap-3">
+  //         <Award className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" size={20} />
+  //         <div>
+  //           <p className="font-medium text-green-800 dark:text-green-300">{subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan active</p>
+  //           <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+  //             {remainingSlots === Infinity 
+  //               ? "You can create unlimited loyalty programs with your current plan." 
+  //               : `You can create ${remainingSlots} more loyalty program${remainingSlots !== 1 ? 's' : ''} with your current plan.`}
+  //           </p>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // };
 
   return (
     <motion.div 
