@@ -6,6 +6,8 @@ import { pinFileToIPFS } from '../utils/pinata';
 import { ChevronLeft, ChevronRight, Upload, X, Plus, Trash2, Eye, Palette, Award, Building2, QrCode, AlertTriangle } from 'lucide-react';
 import * as QRCode from 'qrcode';
 import { checkSubscription, hasReachedProgramLimit, SUBSCRIPTION_PLANS } from '../utils/subscription';
+import { motion, AnimatePresence } from 'framer-motion';
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface LoyaltyProgramMinterProps {
   onLoyaltyProgramMinted?: () => void;
@@ -228,12 +230,12 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
       } else {
           throw new Error(result.message || 'Failed to upload banner');
       }
-    } catch (error: any) {
-        console.error('Error uploading banner:', error);
-        alert(`Error uploading banner: ${error.message}`);
-      } finally {
-        setUploadingBanner(false);
-      }
+    } catch (error: unknown) {
+      console.error('Error uploading banner:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Error uploading banner: ${errorMessage}`);
+    } finally {
+      setUploadingBanner(false);
     }
   };
 
@@ -433,18 +435,22 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
       } else {
         throw new Error('Failed to sign transaction');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating loyalty program:', error);
       
       // Check for specific Pera Wallet errors
-      let errorMessage = error.message || 'Unknown error occurred';
+      let errorMessage = 'Unknown error occurred';
       
-      if (error.message?.includes('PeraWalletConnect was not initialized correctly')) {
-        errorMessage = 'Pera Wallet connection issue. Please try disconnecting and reconnecting your wallet, then try again.';
-      } else if (error.message?.includes('User rejected')) {
-        errorMessage = 'Transaction was rejected by user.';
-      } else if (error.message?.includes('Network error')) {
-        errorMessage = 'Network connection error. Please check your internet connection and try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        if (error.message?.includes('PeraWalletConnect was not initialized correctly')) {
+          errorMessage = 'Pera Wallet connection issue. Please try disconnecting and reconnecting your wallet, then try again.';
+        } else if (error.message?.includes('User rejected')) {
+          errorMessage = 'Transaction was rejected by user.';
+        } else if (error.message?.includes('Network error')) {
+          errorMessage = 'Network connection error. Please check your internet connection and try again.';
+        }
       }
       
       setResult({ 
@@ -857,7 +863,7 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
           {cardStyles.map((style) => (
             <button
               key={style.id}
-              onClick={() => updateFormData({ cardStyle: style.id as any })}
+              onClick={() => updateFormData({ cardStyle: style.id as 'modern' | 'classic' | 'gradient' })}
               className={`p-4 border-2 rounded-lg text-left transition-all ${
                 formData.cardStyle === style.id
                   ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -940,15 +946,87 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
     );
   };
 
+  // Add subscription warning component
+  const renderSubscriptionWarning = () => {
+    if (isCheckingSubscription) {
+      return (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+          <p className="text-blue-800 dark:text-blue-300">Checking subscription status...</p>
+        </div>
+      );
+    }
+
+    if (!subscription || !subscription.isActive) {
+      return (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-yellow-800 dark:text-yellow-300">No active subscription</p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                You don't have an active subscription plan. Your ability to create loyalty programs may be limited.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasReachedLimit()) {
+      return (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-red-800 dark:text-red-300">Program limit reached</p>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+                You've reached the maximum number of loyalty programs ({userProgramCount}) for your {subscription.plan} plan. 
+                Please upgrade your subscription to create more programs.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const remainingSlots = getRemainingSlots();
+    return (
+      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <Award className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="font-medium text-green-800 dark:text-green-300">{subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan active</p>
+            <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+              {remainingSlots === Infinity 
+                ? "You can create unlimited loyalty programs with your current plan." 
+                : `You can create ${remainingSlots} more loyalty program${remainingSlots !== 1 ? 's' : ''} with your current plan.`}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <motion.div 
+      className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+    >
       {/* Form Section */}
       <div className="lg:col-span-2">
         {/* Subscription Status */}
         {renderSubscriptionWarning()}
         
         {/* Progress Bar */}
-        <div className="mb-8">
+        <motion.div 
+          className="mb-8"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+        >
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
               Step {currentStep} of 3
@@ -957,100 +1035,158 @@ export function LoyaltyProgramMinter({ onLoyaltyProgramMinted }: LoyaltyProgramM
               {Math.round((currentStep / 3) * 100)}% Complete
             </span>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-            <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${(currentStep / 3) * 100}%` }}
-            ></div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+            <motion.div 
+              className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${(currentStep / 3) * 100}%` }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            />
           </div>
-        </div>
+        </motion.div>
 
         {/* Step Content */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 shadow-lg">
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
+        <motion.div 
+          className="bg-white dark:bg-gray-800 rounded-xl p-8 shadow-lg card-hover"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {currentStep === 1 && renderStep1()}
+              {currentStep === 2 && renderStep2()}
+              {currentStep === 3 && renderStep3()}
+            </motion.div>
+          </AnimatePresence>
           
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-      <button
+          <motion.div 
+            className="flex justify-between mt-8 pt-6 border-t border-gray-200 dark:border-gray-700"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <motion.button
               onClick={prevStep}
               disabled={currentStep === 1}
-              className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
+              className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-ring"
+              whileHover={currentStep !== 1 ? { scale: 1.02 } : {}}
+              whileTap={currentStep !== 1 ? { scale: 0.98 } : {}}
+            >
               <ChevronLeft size={20} />
               Previous
-      </button>
+            </motion.button>
             
             {currentStep < 3 ? (
-              <button
+              <motion.button
                 onClick={nextStep}
                 disabled={!canProceed()}
-                className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-ring shadow-lg hover:shadow-xl"
+                whileHover={canProceed() ? { scale: 1.02 } : {}}
+                whileTap={canProceed() ? { scale: 0.98 } : {}}
               >
                 Next
                 <ChevronRight size={20} />
-              </button>
+              </motion.button>
             ) : (
-              <button
+              <motion.button
                 onClick={createLoyaltyProgram}
                 disabled={isLoading || !canProceed()}
-                className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-ring shadow-lg hover:shadow-xl"
+                whileHover={!isLoading && canProceed() ? { scale: 1.02 } : {}}
+                whileTap={!isLoading && canProceed() ? { scale: 0.98 } : {}}
               >
                 {isLoading ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    <LoadingSpinner size="sm" />
                     Creating...
                   </>
                 ) : (
-                  'Create Program'
+                  <>
+                    <Award size={20} />
+                    Create Program
+                  </>
                 )}
-              </button>
+              </motion.button>
             )}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       
-      {/* Result Message */}
-      {result && (
-          <div className={`mt-6 p-4 rounded-lg ${result.success ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'}`}>
-          <p>{result.message}</p>
-          {result.assetId && (
-            <p className="mt-2">
-              Asset ID: {result.assetId} - View on{' '}
-              <a 
-                href={`${EXPLORER_URL}/asset/${result.assetId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                Lora Explorer
-              </a>
-            </p>
+        {/* Result Message */}
+        <AnimatePresence>
+          {result && (
+            <motion.div 
+              className={`mt-6 p-4 rounded-lg border ${
+                result.success 
+                  ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border-green-200 dark:border-green-800' 
+                  : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800'
+              }`}
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ duration: 0.3 }}
+            >
+              <p className="font-medium">{result.message}</p>
+              {result.assetId && (
+                <motion.p 
+                  className="mt-2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  Asset ID: {result.assetId} - View on{' '}
+                  <a 
+                    href={`${EXPLORER_URL}/asset/${result.assetId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-green-600 dark:hover:text-green-300 transition-colors"
+                  >
+                    Lora Explorer
+                  </a>
+                </motion.p>
+              )}
+              
+              {/* Troubleshooting for Pera Wallet errors */}
+              {!result.success && result.message.includes('Pera Wallet connection issue') && (
+                <motion.div 
+                  className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Troubleshooting Steps:</h4>
+                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                    <li>1. Disconnect your Pera Wallet from the app</li>
+                    <li>2. Close and reopen the Pera Wallet app</li>
+                    <li>3. Reconnect your wallet to this app</li>
+                    <li>4. Make sure you're on the correct network ({activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'})</li>
+                    <li>5. Try the transaction again</li>
+                  </ul>
+                </motion.div>
+              )}
+            </motion.div>
           )}
-          
-          {/* Troubleshooting for Pera Wallet errors */}
-          {!result.success && result.message.includes('Pera Wallet connection issue') && (
-            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Troubleshooting Steps:</h4>
-              <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
-                <li>1. Disconnect your Pera Wallet from the app</li>
-                <li>2. Close and reopen the Pera Wallet app</li>
-                <li>3. Reconnect your wallet to this app</li>
-                <li>4. Make sure you're on the correct network ({activeNetwork === 'mainnet' ? 'MainNet' : 'TestNet'})</li>
-                <li>5. Try the transaction again</li>
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+        </AnimatePresence>
       </div>
 
       {/* Preview Section */}
-      <div className="lg:col-span-1">
+      <motion.div 
+        className="lg:col-span-1"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.5 }}
+      >
         <div className="sticky top-8">
           {renderPreview()}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
-} 
+} }
