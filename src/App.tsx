@@ -151,11 +151,11 @@ function AppContent() {
 
   return (
     <NetworkProvider>
-      <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
-        {/* Header */}
-        <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
+        <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
+          {/* Header */}
+          <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-8">
                 <Link to="/" className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
                   Gaius
@@ -191,7 +191,7 @@ function AppContent() {
                   <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full">
                     <User size={16} />
                     <span className="text-sm font-medium">{adminName}</span>
-                  </div>
+            </div>
                 )}
                 
                 {/* Sign Out Button - only show when signed in */}
@@ -223,10 +223,10 @@ function AppContent() {
                       <option value={NetworkId.TESTNET}>TestNet</option>
                       <option value={NetworkId.MAINNET}>MainNet</option>
                     </select>
-                  </div>
+                </div>
                 )}
                     <WalletButton />
-                  </div>
+                </div>
                 </div>
               </div>
             </header>
@@ -269,9 +269,9 @@ function AppContent() {
                 </a>
                 </div>
               </div>
-          </div>
+            </div>
         </footer>
-      </div>
+        </div>
     </NetworkProvider>
   );
 }

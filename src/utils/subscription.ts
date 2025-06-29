@@ -1,8 +1,13 @@
 import algosdk from 'algosdk';
 import { getAlgodClient } from './algod';
 
-// Wallet address that receives subscription payments
-const SUBSCRIPTION_WALLET = 'NXZKJ5F74WOM5FI7KQQ4XQVAGAAXLGS6ROUEQJGDWXT6UNOQMTEC5UAAMU';
+// Get subscription wallet from environment variables with fallback
+const SUBSCRIPTION_WALLET = import.meta.env.VITE_SUBSCRIPTION_WALLET || 'NXZKJ5F74WOM5FI7KQQ4XQVAGAAXLGS6ROUEQJGDWXT6UNOQMTEC5UAAMU';
+
+// Validate wallet address format
+if (!algosdk.isValidAddress(SUBSCRIPTION_WALLET)) {
+  console.error('Invalid subscription wallet address in environment variables');
+}
 
 // Subscription plans with their details and limits
 export const SUBSCRIPTION_PLANS = {
